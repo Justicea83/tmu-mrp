@@ -22,31 +22,30 @@ Traditional resume screening relies heavily on keyword matching and manual revie
 
 ### 2.1 Overall Framework
 
-Our system employs a modular architecture consisting of four specialized matching components integrated through a weighted scoring engine:
+Our system employs a modular architecture consisting of five specialized matching components integrated through a weighted scoring engine:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                 Resume-Job Matching Engine                  │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│  General        │  Skills         │  Experience             │
-│  Matcher        │  Matcher        │  Matcher                │
-│                 │                 │                         │
-│ • Semantic      │ • Exact Match   │ • Years Calculation     │
-│   Similarity    │ • Semantic      │ • Requirements vs       │
-│ • Text          │   Similarity    │   Actual Experience     │
-│   Processing    │ • Career-BERT   │ • Weighted Score        │
-│ • Transformer   │   Model         │                         │
-│   Models        │                 │                         │
-├─────────────────┼─────────────────┼─────────────────────────┤
-│  Location       │           Weighted Scoring Engine        │
-│  Matcher        │                                           │
-│                 │ • Configurable Weight Assignment         │
-│ • Geographic    │ • Automatic Normalization (Sum = 1.0)    │
-│   Matching      │ • Individual Score Preservation          │
-│ • Semantic      │ • Overall Score Computation               │
-│   Location      │                                           │
-│   Analysis      │                                           │
-└─────────────────┴───────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Resume-Job Matching Engine                          │
+├─────────────┬─────────────┬─────────────┬─────────────┬───────────────────────┤
+│  General    │  Skills     │ Experience  │ Education   │  Location             │
+│  Matcher    │  Matcher    │ Matcher     │ Matcher     │  Matcher              │
+│             │             │             │             │                       │
+│ • Semantic  │ • Exact     │ • Years     │ • Field     │ • Geographic          │
+│   Similarity│   Match     │   Calc.     │   Mapping   │   Matching            │
+│ • Text      │ • Semantic  │ • Req. vs   │ • Degree    │ • Semantic            │
+│   Process.  │   Similar.  │   Actual    │   Level     │   Location            │
+│ • Transform.│ • Career-   │ • Weighted  │ • HF Data-  │   Analysis            │
+│   Models    │   BERT      │   Score     │   sets      │                       │
+├─────────────┼─────────────┼─────────────┼─────────────┼───────────────────────┤
+│                         Weighted Scoring Engine                              │
+│                                                                               │
+│ • Configurable Weight Assignment (General, Skills, Experience, Education,    │
+│   Location)                                                                   │
+│ • Automatic Normalization (Sum = 1.0)                                        │
+│ • Individual Score Preservation                                              │
+│ • Overall Score Computation                                                  │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Data Models
@@ -269,6 +268,163 @@ The Location Matcher assesses geographic compatibility between candidate locatio
 2. **Semantic Location Similarity**: Related locations using sentence transformers
 3. **Default Handling**: Standardized scoring for unspecified locations
 
+### 3.5 Education Matcher
+
+The Education Matcher evaluates the alignment between candidate educational background and job educational requirements through comprehensive field mapping and degree level analysis.
+
+#### 3.5.1 Educational Data Processing
+
+##### Resume Education Extraction
+Educational information is extracted from structured resume data (JSON parsed by GPT-4-mini) including:
+- **Degree Levels**: Bachelor's, Master's, PhD, Certification programs
+- **Fields of Study**: Specific academic disciplines and specializations  
+- **Institutions**: Educational institutions and their academic reputation
+- **Graduation Dates**: Temporal analysis of educational timeline
+
+##### Job Education Requirements
+Educational requirements are extracted from job descriptions through intelligent parsing:
+- **Required Degree Level**: Minimum educational attainment expectations
+- **Preferred Fields**: Specific academic backgrounds preferred for the role
+- **Alternative Qualifications**: Equivalent experience or certification requirements
+- **Educational Keywords**: Domain-specific educational terminology
+
+#### 3.5.2 Dynamic Field Mapping System
+
+Our education matcher employs a sophisticated field mapping system that combines local comprehensive mappings with optional HuggingFace dataset integration for enhanced coverage.
+
+##### Comprehensive Local Field Mappings
+The system includes 177 carefully curated field mappings across 10 major categories:
+
+```python
+FIELD_MAPPINGS = {
+    'Technology': ['Computer Science', 'Information Technology', 'Software Engineering', 
+                   'Data Science', 'Cybersecurity', 'AI/Machine Learning', ...],
+    'Business': ['Business Administration', 'Management', 'Marketing', 'Finance', 
+                 'Economics', 'Accounting', ...],
+    'Engineering': ['Mechanical Engineering', 'Electrical Engineering', 'Civil Engineering',
+                    'Chemical Engineering', 'Biomedical Engineering', ...],
+    'Science': ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'Statistics', ...],
+    'Healthcare': ['Medicine', 'Nursing', 'Pharmacy', 'Public Health', 'Dentistry', ...],
+    'Education': ['Education', 'Curriculum Development', 'Educational Psychology', ...],
+    'Social Sciences': ['Psychology', 'Sociology', 'Anthropology', 'Political Science', ...],
+    'Arts & Design': ['Graphic Design', 'Fine Arts', 'Architecture', 'Media Studies', ...],
+    'Legal': ['Law', 'Legal Studies', 'Paralegal Studies', 'Criminal Justice', ...],
+    'Agriculture': ['Agricultural Science', 'Forestry', 'Environmental Science', ...]
+}
+```
+
+##### HuggingFace Dataset Integration
+Optional integration with external academic datasets for enhanced field coverage:
+
+- **WikiAcademicSubjects**: 64k academic subject hierarchies from Wikipedia
+- **WikipediaFieldOfScience**: 304k scientific field taxonomies
+- **Processing Safeguards**: 30-second timeout protection, 10k row processing limits, graceful fallback to local mappings
+
+##### Hybrid Matching Approach
+```python
+def find_field_matches(self, education_field: str) -> List[str]:
+    """
+    Multi-tiered field matching with comprehensive coverage
+    """
+    matches = []
+    
+    # 1. Exact matching in local comprehensive mappings
+    for category, fields in self.field_mappings.items():
+        if education_field.lower() in [f.lower() for f in fields]:
+            matches.extend(fields)
+    
+    # 2. Semantic similarity matching within categories
+    for category, fields in self.field_mappings.items():
+        semantic_matches = self._compute_semantic_field_similarity(
+            education_field, fields, threshold=0.7
+        )
+        matches.extend(semantic_matches)
+    
+    # 3. Optional HuggingFace dataset enhancement
+    if self.use_hf_datasets and not matches:
+        hf_matches = self._query_hf_datasets(education_field)
+        matches.extend(hf_matches)
+    
+    return list(set(matches))  # Remove duplicates
+```
+
+#### 3.5.3 Degree Level Analysis
+
+##### Degree Hierarchy System
+Hierarchical degree level mapping for requirement matching:
+
+```python
+DEGREE_LEVELS = {
+    'high_school': 1,
+    'associate': 2, 
+    'bachelor': 3,
+    'master': 4,
+    'doctorate': 5,
+    'certification': 2.5  # Between associate and bachelor
+}
+```
+
+##### Degree Level Scoring
+```python
+def calculate_degree_score(candidate_level: int, required_level: int) -> float:
+    """
+    Calculate education level compatibility score
+    """
+    if candidate_level >= required_level:
+        return 100.0  # Meets or exceeds requirement
+    else:
+        # Proportional scoring for lower degrees
+        return (candidate_level / required_level) * 70  # Max 70% for underqualified
+```
+
+#### 3.5.4 Education Matching Algorithm
+
+##### Comprehensive Education Scoring
+```python
+def compute_education_score(self) -> float:
+    """
+    Multi-dimensional education compatibility assessment
+    """
+    candidate_education = self._extract_candidate_education()
+    job_requirements = self._extract_job_education_requirements()
+    
+    # Field of study matching (70% weight)
+    field_score = self._calculate_field_match_score(
+        candidate_education['fields'], 
+        job_requirements['preferred_fields']
+    )
+    
+    # Degree level matching (30% weight)
+    level_score = self._calculate_degree_level_score(
+        candidate_education['highest_degree'],
+        job_requirements['minimum_degree']
+    )
+    
+    # Weighted combination
+    final_score = (field_score * 0.7) + (level_score * 0.3)
+    
+    return min(100.0, max(0.0, final_score))
+```
+
+##### Field Matching Methodology
+1. **Exact Field Matching**: Direct comparison of academic fields (weight: 1.0)
+2. **Category-Level Matching**: Broader category alignment (weight: 0.8)  
+3. **Semantic Field Similarity**: Transformer-based field relationship analysis (weight: 0.6)
+4. **Cross-Disciplinary Recognition**: Recognition of interdisciplinary field relationships
+
+#### 3.5.5 Robustness and Error Handling
+
+##### Production-Ready Safeguards
+- **Timeout Protection**: 30-second limits for external dataset loading
+- **Processing Limits**: Maximum 10k rows from HuggingFace datasets to prevent infinite loops
+- **Graceful Fallback**: Automatic fallback to comprehensive local mappings on external failures
+- **Environment Controls**: `DISABLE_HF_DATASETS` flag for complete external dataset bypass
+
+##### Data Quality Assurance
+- **Field Name Validation**: Length and content validation to prevent junk data processing
+- **Null Value Handling**: Robust handling of missing educational information
+- **Format Standardization**: Consistent educational data format across processing pipeline
+
 ## 4. Weighted Scoring Framework
 
 ### 4.1 Multi-Dimensional Integration
@@ -279,6 +435,7 @@ Our weighted scoring system allows for flexible prioritization of different matc
 - **General Weight** (w_g): Overall semantic compatibility importance
 - **Skills Weight** (w_s): Technical skill matching priority  
 - **Experience Weight** (w_e): Experience requirement emphasis
+- **Education Weight** (w_ed): Educational background and requirements alignment
 - **Location Weight** (w_l): Geographic preference significance
 
 #### 4.1.2 Automatic Normalization
@@ -296,9 +453,10 @@ def normalize_weights(raw_weights: Dict[str, float]) -> Dict[str, float]:
 #### 4.1.3 Overall Score Computation
 ```
 Overall_Score = (w_g × General_Score + w_s × Skills_Score + 
-                w_e × Experience_Score + w_l × Location_Score)
+                w_e × Experience_Score + w_ed × Education_Score + 
+                w_l × Location_Score)
 
-Where: w_g + w_s + w_e + w_l = 1.0
+Where: w_g + w_s + w_e + w_ed + w_l = 1.0
 ```
 
 ### 4.2 Score Interpretation
@@ -369,10 +527,11 @@ Where: w_g + w_s + w_e + w_l = 1.0
 ### 6.2 Experimental Configurations
 
 #### 6.2.1 Weight Sensitivity Analysis
-- **Equal Weights**: Baseline configuration with uniform weighting (0.25 each)
-- **Skills-Heavy**: Emphasis on technical skill matching (e.g., 0.1, 0.6, 0.2, 0.1)
-- **Experience-Heavy**: Priority on experience requirements (e.g., 0.2, 0.2, 0.5, 0.1)
-- **Balanced Professional**: Optimized for professional roles (e.g., 0.3, 0.4, 0.2, 0.1)
+- **Equal Weights**: Baseline configuration with uniform weighting (0.2 each)
+- **Skills-Heavy**: Emphasis on technical skill matching (e.g., 0.1, 0.5, 0.2, 0.1, 0.1)
+- **Experience-Heavy**: Priority on experience requirements (e.g., 0.2, 0.2, 0.4, 0.1, 0.1)
+- **Education-Heavy**: Academic background priority (e.g., 0.2, 0.2, 0.1, 0.4, 0.1)
+- **Balanced Professional**: Optimized for professional roles (e.g., 0.3, 0.3, 0.2, 0.1, 0.1)
 
 #### 6.2.2 Ablation Studies
 - **Individual Matcher Performance**: Evaluation of each matcher in isolation
@@ -415,8 +574,9 @@ Key innovations include:
 
 - **LLM-Enhanced Data Processing**: GPT-4-mini integration for reliable structured data extraction from diverse resume formats
 - **Privacy-Preserving Similarity**: Comprehensive identifier removal ensuring fair comparison based on professional qualifications
-- **Multi-Dimensional Assessment**: Integrated evaluation across semantic similarity, skills, experience, and location compatibility
-- **Flexible Weighted Framework**: Automatic normalization with intuitive control over matching priorities
+- **Five-Dimensional Assessment**: Integrated evaluation across semantic similarity, skills, experience, education, and location compatibility
+- **Advanced Education Matching**: Comprehensive field mapping system with 177 curated academic fields and optional HuggingFace dataset integration
+- **Flexible Weighted Framework**: Automatic normalization with intuitive control over matching priorities across all five dimensions
 
 The methodology supports both research applications and practical deployment scenarios, with robust evaluation frameworks for validating system performance and comprehensive error handling for production reliability. The integration of large language models for resume parsing, combined with privacy-preserving similarity computation, represents a significant advancement in automated recruitment technology, providing a foundation for fair, efficient, and effective candidate screening processes.
 
