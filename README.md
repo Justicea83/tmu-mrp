@@ -58,7 +58,17 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Environment Configuration
+### 4. Download spaCy Language Model
+```bash
+python -m spacy download en_core_web_lg
+```
+
+This downloads the large English language model required for:
+- Named Entity Recognition (NER) for PII removal
+- Advanced text processing and entity extraction
+- Resume parsing and analysis
+
+### 5. Environment Configuration
 Create a `.env` file in the root directory:
 ```bash
 cp .env.example .env
@@ -69,7 +79,7 @@ Edit the `.env` file and add your OpenAI API key:
 OPENAI_SECRET=sk-your-actual-openai-api-key-here
 ```
 
-### 5. Download Required Models
+### 6. Download Required Models
 Download the sentence transformer models:
 ```bash
 python -m core.preprocessors.download_sentence_transformer
@@ -285,6 +295,11 @@ pydantic>=2.0.0
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.65.0
+```
+
+**Important**: After installing spaCy, download the English language model:
+```bash
+python -m spacy download en_core_web_lg
 ```
 
 ## 🚨 Important Considerations
