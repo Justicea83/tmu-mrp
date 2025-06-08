@@ -24,6 +24,7 @@ class DiversityAnalytics:
     - Score distribution fairness
     - Statistical significance testing
     - Bias mitigation recommendations
+    - Gender-coded language analysis (Gaucher et al. 2011)
     """
     
     def __init__(self):
@@ -48,6 +49,26 @@ class DiversityAnalytics:
             'andrew', 'joshua', 'kenneth', 'kevin', 'brian', 'george', 'edward', 'ronald'
         }
         
+        # Gaucher et al. (2011) Gender-coded word lists
+        # From "Evidence That Gendered Wording in Job Advertisements Exists and Sustains Gender Inequality"
+        self.masculine_words = [
+            "active", "adventurous", "aggress", "ambitio", "analy", "assert", "athlet", "autonom", 
+            "battle", "boast", "challeng", "compet", "confident", "courag", "decid", "decision", 
+            "decisive", "defend", "determin", "dominant", "force", "greedy", "headstrong", "hierarch", 
+            "hostil", "impulsive", "independen", "individual", "intellect", "lead", "logic", 
+            "objective", "opinion", "outspoken", "persist", "principle", "reckless", "self", 
+            "self-reliant", "stubborn", "superior"
+        ]
+        
+        self.feminine_words = [
+            "affectionate", "child", "cheer", "commit", "communal", "compassion", "connect", 
+            "considerate", "cooperat", "depend", "emotion", "empath", "feel", "flatterable", 
+            "gentle", "honest", "interdependen", "interpersona", "kind", "kinship", "loyal", 
+            "modesty", "nag", "nurtur", "pleasant", "polite", "quiet", "respon", "sensitiv", 
+            "submissive", "support", "sympath", "tender", "together", "trust", "understand", 
+            "warm", "whin", "yield"
+        ]
+        
         # Statistical significance thresholds
         self.significance_threshold = 0.05
         self.effect_size_thresholds = {
@@ -57,13 +78,15 @@ class DiversityAnalytics:
         }
 
     def analyze_diversity_metrics(self, results: List[Dict[str, Any]], 
-                                 resumes_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+                                 resumes_data: List[Dict[str, Any]],
+                                 jobs_data: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Comprehensive diversity analysis of ranking results.
         
         Args:
             results: List of ranking results
             resumes_data: List of resume data for additional analysis
+            jobs_data: List of job data for gender-coded language analysis
             
         Returns:
             Dict containing comprehensive diversity metrics
@@ -78,6 +101,10 @@ class DiversityAnalytics:
             'statistical_tests': self._perform_statistical_tests(results, resumes_data),
             'recommendations': self._generate_bias_recommendations(results, resumes_data)
         }
+        
+        # Add gender-coded language analysis if job data is provided
+        if jobs_data:
+            analysis['gender_coded_language'] = self._analyze_gender_coded_language(jobs_data)
         
         return analysis
 
@@ -148,6 +175,240 @@ class DiversityAnalytics:
         except Exception as e:
             self.logger.warning(f"Error estimating gender: {e}")
             return 'Unknown'
+    
+    def _analyze_gender_coded_language(self, jobs_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Analyze gender-coded language in job descriptions using Gaucher et al. (2011) methodology.
+        
+        Args:
+            jobs_data: List of job posting data
+            
+        Returns:
+            Dict containing gender bias analysis for each job
+        """
+        
+        job_analyses = []
+        overall_stats = {
+            'masculine_bias_count': 0,
+            'feminine_bias_count': 0,
+            'neutral_count': 0,
+            'total_jobs': len(jobs_data)
+        }
+        
+        for job in jobs_data:
+            job_analysis = self._analyze_single_job_gender_coding(job)
+            job_analyses.append(job_analysis)
+            
+            # Update overall statistics
+            if job_analysis['gender_polarity'] > 1:
+                overall_stats['masculine_bias_count'] += 1
+            elif job_analysis['gender_polarity'] < -1:
+                overall_stats['feminine_bias_count'] += 1
+            else:
+                overall_stats['neutral_count'] += 1
+        
+        # Calculate percentages
+        total = overall_stats['total_jobs']
+        if total > 0:
+            overall_stats['masculine_bias_percentage'] = round((overall_stats['masculine_bias_count'] / total) * 100, 1)
+            overall_stats['feminine_bias_percentage'] = round((overall_stats['feminine_bias_count'] / total) * 100, 1)
+            overall_stats['neutral_percentage'] = round((overall_stats['neutral_count'] / total) * 100, 1)
+        
+        return {
+            'methodology': 'Gaucher et al. (2011) - Evidence That Gendered Wording in Job Advertisements Exists and Sustains Gender Inequality',
+            'overall_statistics': overall_stats,
+            'job_analyses': job_analyses,
+            'bias_assessment': self._assess_gender_bias_severity(overall_stats),
+            'recommendations': self._generate_gender_language_recommendations(overall_stats, job_analyses)
+        }
+    
+    def _analyze_single_job_gender_coding(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze gender-coded language for a single job posting.
+        
+        Args:
+            job: Single job posting data
+            
+        Returns:
+            Dict containing gender bias metrics for the job
+        """
+        
+        # Extract job text
+        job_text = self._extract_job_text(job).lower()
+        
+        # Count masculine and feminine words
+        masculine_score = sum(1 for word in self.masculine_words if word in job_text)
+        feminine_score = sum(1 for word in self.feminine_words if word in job_text)
+        
+        # Calculate gender polarity (Gaucher et al. methodology)
+        gender_polarity = masculine_score - feminine_score
+        
+        # Identify specific words found
+        masculine_words_found = [word for word in self.masculine_words if word in job_text]
+        feminine_words_found = [word for word in self.feminine_words if word in job_text]
+        
+        # Determine bias classification
+        bias_classification = self._classify_gender_bias(gender_polarity)
+        
+        return {
+            'job_id': job.get('id', 'Unknown'),
+            'job_title': job.get('Position', 'Unknown'),
+            'company': job.get('Company', 'Unknown'),
+            'masculine_score': masculine_score,
+            'feminine_score': feminine_score,
+            'gender_polarity': gender_polarity,
+            'bias_classification': bias_classification,
+            'masculine_words_found': masculine_words_found,
+            'feminine_words_found': feminine_words_found,
+            'total_gendered_words': masculine_score + feminine_score,
+            'word_density': self._calculate_word_density(job_text, masculine_score + feminine_score)
+        }
+    
+    def _extract_job_text(self, job: Dict[str, Any]) -> str:
+        """Extract all relevant text from job posting."""
+        
+        text_fields = [
+            'Position', 'Company', 'Long Description', 'Short Description',
+            'Primary Keyword', 'Requirements', 'Responsibilities', 'Benefits'
+        ]
+        
+        job_text = ""
+        for field in text_fields:
+            value = job.get(field)
+            if value and isinstance(value, str):
+                job_text += " " + value
+        
+        return job_text.strip()
+    
+    def _classify_gender_bias(self, gender_polarity: int) -> str:
+        """
+        Classify gender bias level based on polarity score.
+        
+        Args:
+            gender_polarity: Masculine score minus feminine score
+            
+        Returns:
+            String classification of bias level
+        """
+        
+        if gender_polarity >= 3:
+            return "Strong Masculine Bias"
+        elif gender_polarity >= 1:
+            return "Moderate Masculine Bias"
+        elif gender_polarity <= -3:
+            return "Strong Feminine Bias"
+        elif gender_polarity <= -1:
+            return "Moderate Feminine Bias"
+        else:
+            return "Gender Neutral"
+    
+    def _calculate_word_density(self, text: str, gendered_word_count: int) -> float:
+        """Calculate density of gendered words per 100 words."""
+        
+        total_words = len(text.split())
+        if total_words == 0:
+            return 0.0
+        
+        return round((gendered_word_count / total_words) * 100, 2)
+    
+    def _assess_gender_bias_severity(self, stats: Dict[str, Any]) -> str:
+        """Assess overall gender bias severity across all jobs."""
+        
+        total = stats['total_jobs']
+        if total == 0:
+            return "No data available"
+        
+        masculine_pct = stats.get('masculine_bias_percentage', 0)
+        feminine_pct = stats.get('feminine_bias_percentage', 0)
+        
+        if masculine_pct > 50 or feminine_pct > 50:
+            return "High Bias Risk - Majority of jobs show gender-coded language"
+        elif masculine_pct > 25 or feminine_pct > 25:
+            return "Moderate Bias Risk - Significant portion of jobs show gender-coded language"
+        elif masculine_pct > 10 or feminine_pct > 10:
+            return "Low Bias Risk - Some jobs show gender-coded language"
+        else:
+            return "Minimal Bias Risk - Most jobs use gender-neutral language"
+    
+    def _generate_gender_language_recommendations(self, stats: Dict[str, Any], 
+                                                job_analyses: List[Dict[str, Any]]) -> List[str]:
+        """Generate recommendations for reducing gender-coded language."""
+        
+        recommendations = []
+        
+        # Overall recommendations
+        masculine_pct = stats.get('masculine_bias_percentage', 0)
+        feminine_pct = stats.get('feminine_bias_percentage', 0)
+        
+        if masculine_pct > 25:
+            recommendations.append(
+                f"CRITICAL: {masculine_pct}% of jobs show masculine bias. "
+                "Replace competitive/aggressive language with collaborative terms."
+            )
+        
+        if feminine_pct > 25:
+            recommendations.append(
+                f"ATTENTION: {feminine_pct}% of jobs show feminine bias. "
+                "Balance nurturing language with achievement-oriented terms."
+            )
+        
+        # Specific word recommendations
+        most_common_masculine = self._find_most_common_words(job_analyses, 'masculine_words_found')
+        most_common_feminine = self._find_most_common_words(job_analyses, 'feminine_words_found')
+        
+        if most_common_masculine:
+            recommendations.append(
+                f"Most common masculine words: {', '.join(most_common_masculine[:5])}. "
+                "Consider alternatives: 'lead' → 'guide', 'dominant' → 'effective', 'aggressive' → 'proactive'"
+            )
+        
+        if most_common_feminine:
+            recommendations.append(
+                f"Most common feminine words: {', '.join(most_common_feminine[:5])}. "
+                "Balance with achievement terms: Add 'achieve', 'accomplish', 'drive results'"
+            )
+        
+        # General best practices
+        recommendations.extend([
+            "Use active voice and specific action verbs",
+            "Focus on role requirements rather than personal traits",
+            "Include both collaborative and achievement-oriented language",
+            "Review job postings with diverse team members before publishing"
+        ])
+        
+        return recommendations
+    
+    def _find_most_common_words(self, job_analyses: List[Dict[str, Any]], 
+                               word_field: str) -> List[str]:
+        """Find most commonly used gendered words across all jobs."""
+        
+        word_counts = Counter()
+        for analysis in job_analyses:
+            words = analysis.get(word_field, [])
+            word_counts.update(words)
+        
+        return [word for word, count in word_counts.most_common(10)]
+    
+    def gender_polarity_counts(self, text: str) -> Dict[str, int]:
+        """
+        Gaucher et al. (2011) gender polarity analysis function.
+        
+        Args:
+            text: Text to analyze
+            
+        Returns:
+            Dict with masculine_score, feminine_score, and gender_polarity
+        """
+        
+        text = text.lower()
+        masculine_score = sum(text.count(word) for word in self.masculine_words)
+        feminine_score = sum(text.count(word) for word in self.feminine_words)
+        
+        return {
+            "masculine_score": masculine_score,
+            "feminine_score": feminine_score,
+            "gender_polarity": masculine_score - feminine_score
+        }
 
     def _calculate_diversity_index(self, counts: List[int]) -> float:
         """Calculate Shannon diversity index."""

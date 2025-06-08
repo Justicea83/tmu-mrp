@@ -859,10 +859,11 @@ def main():
                     logger.info("Performing diversity and bias analysis...")
                     diversity_analyzer = DiversityAnalytics()
                     
-                    # Convert resumes to dict format for analysis
+                    # Convert resumes and jobs to dict format for analysis
                     resumes_dict = [resume.__dict__ for resume in resumes]
+                    jobs_dict = [job.__dict__ for job in jobs]
                     
-                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict)
+                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict, jobs_dict)
                     
                     # Save diversity analysis
                     diversity_file = ensure_logs_directory(f"diversity_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
@@ -1015,10 +1016,11 @@ def main():
                     logger.info("Performing diversity and bias analysis...")
                     diversity_analyzer = DiversityAnalytics()
                     
-                    # Convert resumes to dict format for analysis
+                    # Convert resumes and jobs to dict format for analysis
                     resumes_dict = [resume.__dict__ for resume in resumes]
+                    jobs_dict = [job.__dict__ for job in jobs]
                     
-                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict)
+                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict, jobs_dict)
                     
                     # Save diversity analysis
                     diversity_file = ensure_logs_directory(f"diversity_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
