@@ -421,15 +421,27 @@ class LearningToRankEngine:
         """
         
         try:
+            # Check minimum sample size
+            if len(features) < 2:
+                raise ValueError(f"Insufficient training data: {len(features)} samples. Need at least 2 samples for training.")
+            
             # Initialize model
             if self.model_type not in self.model_options:
                 raise ValueError(f"Unknown model type: {self.model_type}")
             
             self.model = self.model_options[self.model_type]
             
-            # Split data
+            # Split data (adaptive validation split for small datasets)
+            n_total_samples = len(features)
+            adaptive_validation_split = min(validation_split, max(0.1, 1.0 / n_total_samples))
+            
+            if n_total_samples <= 5:
+                # For very small datasets, use minimal validation split
+                adaptive_validation_split = min(0.2, 1.0 / n_total_samples)
+                self.logger.info(f"Small dataset ({n_total_samples} samples): using validation split of {adaptive_validation_split:.2f}")
+            
             X_train, X_val, y_train, y_val = train_test_split(
-                features, labels, test_size=validation_split, random_state=42
+                features, labels, test_size=adaptive_validation_split, random_state=42
             )
             
             # Scale features
@@ -453,8 +465,15 @@ class LearningToRankEngine:
             elif hasattr(self.model, 'coef_'):
                 self.feature_importance = dict(zip(self.feature_names, abs(self.model.coef_)))
             
-            # Cross-validation score
-            cv_scores = cross_val_score(self.model, X_train_scaled, y_train, cv=5, scoring='neg_mean_squared_error')
+            # Cross-validation score (adaptive to sample size)
+            n_samples = len(X_train)
+            cv_folds = min(5, max(2, n_samples))  # Use 2-5 folds based on sample size
+            
+            if n_samples < 2:
+                self.logger.warning(f"Too few samples ({n_samples}) for cross-validation. Skipping CV.")
+                cv_scores = np.array([train_mse])  # Use training MSE as fallback
+            else:
+                cv_scores = cross_val_score(self.model, X_train_scaled, y_train, cv=cv_folds, scoring='neg_mean_squared_error')
             
             results = {
                 'train_mse': train_mse,
