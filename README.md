@@ -1,21 +1,43 @@
-# Model Training for Resume and Job Matching
+# Multi-Dimensional Resume-Job Ranking System
 
-This project provides a complete pipeline for processing resumes and job descriptions using AI-powered parsing and machine learning models. It includes entity definitions, OpenAI integration for structured data extraction, and sentence transformers for semantic matching.
+A comprehensive AI-powered system for matching resumes to job descriptions using advanced natural language processing, multi-dimensional scoring, and machine learning models. This project provides complete pipelines for resume parsing, job analysis, and intelligent ranking with research-grade analysis capabilities.
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **Resume Processing**: AI-powered parsing of resume text into structured JSON format
-- **Job Description Processing**: Structured entities for job postings with comprehensive metadata
-- **Machine Learning Models**: Pre-configured sentence transformers for semantic analysis
-- **OpenAI Integration**: Leverages GPT models for intelligent text parsing
-- **Data Pipeline**: Complete preprocessing pipeline from raw CSV to structured data
-- **Pydantic Entities**: Type-safe data models for resumes and job posts
+### 🤖 **AI-Powered Resume Processing**
+- **GPT-4-mini Integration**: Intelligent parsing of resumes into structured JSON format
+- **PII Removal**: Comprehensive removal of personally identifiable information
+- **Multi-format Support**: Handles both text and HTML resume formats
+- **Structured Data Extraction**: Extracts experience, education, skills, and personal information
+
+### 📊 **Multi-Dimensional Matching Engine**
+- **General Semantic Matching**: Uses sentence transformers for content similarity
+- **Skills Matching**: Specialized matching for technical and professional skills
+- **Experience Matching**: Analyzes work experience and career progression
+- **Location Matching**: Geographic compatibility assessment
+- **Weighted Scoring**: Configurable weights for different matching dimensions
+
+### 🔬 **Research & Analysis Tools**
+- **Model Comparison**: Compare CareerBERT vs general models (all-mpnet-base-v2)
+- **Category Analysis**: Comprehensive performance analysis by resume categories
+- **Balanced Sampling**: Ensure fair representation across resume categories
+- **Statistical Analysis**: Detailed performance metrics and confidence intervals
+- **Export Capabilities**: Multiple output formats for research documentation
+
+### 🎯 **Advanced Filtering & Configuration**
+- **Category Filtering**: Filter by resume categories (IT, HR, Automobile)
+- **Job Keyword Filtering**: Filter jobs by position keywords
+- **Flexible Weighting**: Customize importance of different matching dimensions
+- **Model Selection**: Choose between different sentence transformer models
+- **Batch Processing**: Efficient processing of large datasets
 
 ## 📋 Prerequisites
 
 - Python 3.11 or higher
-- OpenAI API key
+- OpenAI API key (for resume parsing)
 - Git
+- 4GB+ RAM recommended for model processing
+- 2GB+ disk space for models and data
 
 ## 🛠️ Installation
 
@@ -47,216 +69,308 @@ Edit the `.env` file and add your OpenAI API key:
 OPENAI_SECRET=sk-your-actual-openai-api-key-here
 ```
 
-**Important**: Never commit your actual `.env` file to version control.
-
 ### 5. Download Required Models
 Download the sentence transformer models:
 ```bash
 python -m core.preprocessors.download_sentence_transformer
 ```
 
-This will download:
-- `sentence-transformers/all-mpnet-base-v2` - General purpose sentence transformer
-- `lwolfrum2/careerbert-jg` - Specialized model for job/career matching
+This downloads:
+- `sentence-transformers/all-mpnet-base-v2` - General purpose model
+- `lwolfrum2/careerbert-jg` - Job/career specialized model
 
 ## 📁 Project Structure
 
 ```
 model-training/
 ├── core/
-│   ├── entities/              # Pydantic data models
-│   │   ├── resume.py         # Resume entity definition
-│   │   ├── jobpost.py        # Job post entity definition
-│   │   └── __init__.py
-│   ├── openai/               # OpenAI integration
-│   │   ├── wrapper.py        # OpenAI API wrapper
-│   │   ├── post_processor.py # Response processing
-│   │   └── ...
-│   ├── prompt_schema/        # AI prompt schemas
-│   │   ├── resume_schema.py  # Resume parsing schema
-│   │   └── ...
-│   ├── preprocessors/        # Data processing scripts
-│   │   ├── parse_resumes_to_json.py  # Main resume parser
-│   │   └── download_sentence_transformer.py
-│   └── utils.py             # Utility functions
-├── datasets/                 # Data files
-│   ├── resumes.csv          # Raw resume data
-│   ├── job_descriptions.csv # Raw job data
-│   └── resumes_final.csv    # Processed resume data (generated)
-├── sentence-transformers/   # Downloaded ML models
-├── .env                     # Environment variables (create this)
-├── .env.example            # Environment template
-├── requirements.txt        # Python dependencies
-└── README.md              # This file
+│   ├── matching_engine/          # Multi-dimensional matching system
+│   │   ├── base.py              # Base matching engine
+│   │   ├── general.py           # General semantic matching
+│   │   ├── skills.py            # Skills-specific matching
+│   │   ├── experience.py        # Experience matching
+│   │   ├── location.py          # Location matching
+│   │   └── engine.py            # Main engine coordination
+│   ├── models.py                # Pydantic data models
+│   ├── resume_parser.py         # AI-powered resume parsing
+│   ├── openai/                  # OpenAI integration
+│   └── utils.py                 # Utility functions
+├── runners/
+│   └── rank.py                  # Main ranking script
+├── datasets/                    # Data files
+│   ├── resumes_final.csv        # Processed resume data
+│   └── job_descriptions.csv     # Job descriptions data
+├── logs/                        # Generated output files
+│   ├── ranking_results_*.csv    # Ranking results
+│   ├── *_analysis.csv           # Analysis files
+│   └── *.log                    # Log files
+├── rank.sh                      # Configuration script
+├── METHODOLOGY.md               # Detailed methodology
+└── README.md                    # This file
 ```
 
-## 🎯 Usage
+## 🎯 Quick Start
 
-### Resume Processing Pipeline
-
-The main pipeline processes resumes from the dataset, selects specific categories, and parses them using AI:
-
+### Basic Resume-Job Ranking
 ```bash
-# Process resumes (selects 80 IT, 20 Automobile, 20 HR resumes)
-python -m core.preprocessors.parse_resumes_to_json
+# Run with pre-configured settings
+./rank.sh
 
-# Or use the runner script
-python run_resume_parser.py
+# Or run directly
+python runners/rank.py --num-jobs 5 --num-resumes 20
 ```
 
-This will:
-1. Load resumes from `datasets/resumes.csv`
-2. Select 120 resumes (80 IT, 20 Automobile, 20 HR)
-3. Parse each resume using OpenAI to extract structured data
-4. Save results to `datasets/resumes_final.csv`
-
-### Using the Entities
-
-```python
-from core.entities import Resume, JobPost
-
-# Create a resume instance
-resume = Resume(
-    ID="123",
-    Resume_str="Software Engineer with 5 years experience...",
-    Resume_html="<html>...</html>",
-    Category="INFORMATION-TECHNOLOGY",
-    # ... other fields
-)
-
-# Create a job post instance
-jobpost = JobPost(
-    Position="Senior Software Engineer",
-    Long_Description="We are looking for...",
-    Company_Name="Tech Corp",
-    # ... other fields
-)
+### Category Comparison Analysis
+```bash
+python runners/rank.py \
+  --resume-categories INFORMATION-TECHNOLOGY HR \
+  --category-analysis \
+  --num-jobs 10 --num-resumes 50
 ```
 
-### Direct AI Parsing
-
-```python
-from core.preprocessors.parse_resumes_to_json import ResumeParser
-
-parser = ResumeParser()
-parsed_data = parser.parse_resume_with_ai("Your resume text here...")
-print(parsed_data)  # Structured JSON output
+### Model Comparison Research
+```bash
+python runners/rank.py \
+  --model-comparison \
+  --models-to-compare careerbert sentence-transformers/all-mpnet-base-v2 \
+  --num-jobs 5 --num-resumes 20
 ```
 
-## 📊 Data Schema
+### Custom Weight Configuration
+```bash
+python runners/rank.py \
+  --general-weight 2.0 \
+  --skills-weight 3.0 \
+  --experience-weight 1.5 \
+  --location-weight 0.5 \
+  --top-k 5
+```
 
-### Resume Entity Fields
-- `ID`: Unique identifier
-- `Resume_str`: Raw resume text
-- `Resume_html`: HTML version of resume
-- `Category`: Resume category (IT, HR, etc.)
-- `hash`: Content hash
-- `char_len`: Character count
-- `sent_len`: Sentence count
-- `type_token_ratio`: Linguistic metric
-- `gender_term_count`: Gender-related terms
-- `html_len`: HTML length
-- `text_from_html`: Extracted text
-- `html_strip_diff`: HTML processing difference
+## 🔧 Configuration Options
 
-### Job Post Entity Fields
-- `Position`: Job title
-- `Long_Description`: Full job description
-- `Company_Name`: Hiring company
-- `Exp_Years`: Required experience
-- `Primary_Keyword`: Main job keyword
-- `English_Level`: Required English proficiency
-- `Published`: Publication status
-- `Long_Description_lang`: Description language
-- `id`: Unique identifier
-- `__index_level_0__`: Index reference
-- `char_len`: Description length
+### 📊 **Data Configuration**
+- `--resumes-file`: Path to resumes CSV file
+- `--jobs-file`: Path to job descriptions CSV file  
+- `--num-resumes`: Number of resumes to process
+- `--num-jobs`: Number of jobs to process
 
-## 🔧 Configuration
+### 🎯 **Filtering Options**
+- `--resume-categories`: Filter by categories (INFORMATION-TECHNOLOGY, HR, AUTOMOBILE)
+- `--job-keywords`: Filter jobs by keywords
+- `--balanced-categories`: Enable balanced category sampling
+- `--category-analysis`: Enable detailed category analysis
 
-### Environment Variables
-- `OPENAI_SECRET`: Your OpenAI API key (required)
+### ⚖️ **Scoring Configuration**
+- `--general-weight`: Weight for general semantic matching
+- `--skills-weight`: Weight for skills matching  
+- `--experience-weight`: Weight for experience matching
+- `--location-weight`: Weight for location matching
 
-### Model Configuration
-Models are configured in `core/preprocessors/download_sentence_transformer.py`:
-- **Primary Model**: `sentence-transformers/all-mpnet-base-v2`
-- **Career Model**: `lwolfrum2/careerbert-jg`
+### 🤖 **Model Configuration**
+- `--general-model`: Model for general matching
+- `--skills-model`: Model for skills matching
+- `--model-comparison`: Enable model comparison mode
+- `--models-to-compare`: List of models to compare
 
-### Processing Configuration
-Resume selection is configured in `parse_resumes_to_json.py`:
-```python
-CATEGORY_COUNTS = {
-    "INFORMATION-TECHNOLOGY": 80,
-    "AUTOMOBILE": 20,
-    "HR": 20
-}
+### 📈 **Output Options**
+- `--output-file`: Custom output file path
+- `--top-k`: Number of top matches per job
+- `--verbose`: Enable detailed logging
+
+## 📊 Understanding the Output
+
+### Main Results File
+```csv
+job_id,job_position,job_company,rank,resume_id,resume_category,total_score,general_score,skills_score,experience_score,location_score
+```
+
+### Category Analysis File
+Comprehensive statistics showing:
+- Performance by resume category
+- Score distributions and confidence intervals
+- Category representation in top-k results
+- Statistical significance testing
+
+### Model Comparison Files
+- **Detailed Comparison**: Side-by-side model results
+- **Model Statistics**: Performance metrics per model
+- **Individual Results**: Separate files per model
+
+## 🔬 Research Applications
+
+### Model Performance Evaluation
+Compare fine-tuned models (CareerBERT) against general models:
+```bash
+python runners/rank.py --model-comparison --category-analysis
+```
+
+**Sample Results:**
+- CareerBERT: 54.50 ± 2.37 average score
+- All-MPNet-Base-v2: 42.39 ± 0.89 average score
+- 28% improvement with domain-specific model
+
+### Category Bias Analysis
+Analyze how different resume categories perform:
+```bash
+python runners/rank.py --resume-categories INFORMATION-TECHNOLOGY HR AUTOMOBILE --balanced-categories --category-analysis
+```
+
+### Weight Sensitivity Analysis
+Test different weight configurations:
+```bash
+# Skills-focused
+python runners/rank.py --skills-weight 5.0 --general-weight 1.0
+
+# Experience-focused  
+python runners/rank.py --experience-weight 3.0 --skills-weight 1.0
 ```
 
 ## 🧪 Development
 
-### Adding New Entities
-1. Create new entity file in `core/entities/`
-2. Define Pydantic model with appropriate fields
-3. Add import to `core/entities/__init__.py`
+### Adding New Matchers
+1. Create new matcher in `core/matching_engine/`
+2. Inherit from `BaseMatcher`
+3. Implement `compute_score()` method
+4. Register in `engine.py`
 
-### Extending AI Parsing
-1. Create new schema in `core/prompt_schema/`
-2. Follow the pattern in `resume_schema.py`
-3. Use with the `QueryEngine` class
+### Custom Models
+1. Add model to `download_sentence_transformer.py`
+2. Use `--general-model` or `--skills-model` parameters
+3. Models must be compatible with sentence-transformers
 
-### Custom Preprocessing
-1. Add new scripts to `core/preprocessors/`
-2. Follow the pattern in existing scripts
-3. Use the logging utilities from `core.utils`
+### Extending Analysis
+1. Modify `save_results()` in `runners/rank.py`
+2. Add new statistical computations
+3. Export additional CSV files as needed
 
-## 📝 Dependencies
+## 📊 Methodology
 
-Key dependencies include:
-- `pydantic`: Data validation and parsing
-- `openai`: OpenAI API integration
-- `pandas`: Data manipulation
-- `sentence-transformers`: ML models for text embeddings
-- `torch`: PyTorch for ML operations
-- `python-dotenv`: Environment variable management
+The system implements a sophisticated multi-dimensional matching approach:
 
-## 🚨 Important Notes
+### 1. **Resume Processing Pipeline**
+- **GPT-4-mini Parsing**: Structured data extraction
+- **PII Removal**: Privacy-preserving text cleaning
+- **Normalization**: Standardized format conversion
 
-1. **API Costs**: The resume parsing uses OpenAI API calls, which incur costs
-2. **Rate Limits**: Be aware of OpenAI rate limits when processing large datasets
-3. **Model Storage**: Downloaded models require ~1GB of disk space
-4. **Processing Time**: AI parsing is time-intensive (expect several minutes for 120 resumes)
+### 2. **Multi-Dimensional Scoring**
+- **General Matching**: Semantic similarity via sentence transformers
+- **Skills Matching**: Exact + semantic skills comparison  
+- **Experience Matching**: Career level and duration analysis
+- **Location Matching**: Geographic compatibility
 
-## 🆘 Troubleshooting
+### 3. **Advanced Features**
+- **Weighted Aggregation**: Customizable importance weighting
+- **Model Comparison**: CareerBERT vs general models
+- **Category Analysis**: Bias detection and performance analysis
+- **Statistical Validation**: Confidence intervals and significance testing
 
-### Common Issues
+For detailed methodology, see [METHODOLOGY.md](METHODOLOGY.md).
 
-**Import Errors**: Ensure virtual environment is activated and all dependencies installed
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
+## 📝 Key Dependencies
+
+```python
+# Core ML & NLP
+sentence-transformers>=2.2.2
+torch>=2.0.0
+spacy>=3.7.0
+
+# Data Processing  
+pandas>=2.0.0
+numpy>=1.24.0
+
+# AI Integration
+openai>=1.0.0
+pydantic>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.65.0
 ```
 
-**OpenAI API Errors**: Check your API key and account credits
+## 🚨 Important Considerations
+
+### **Performance & Costs**
+- **Processing Time**: ~30 seconds per resume for AI parsing
+- **API Costs**: GPT-4-mini usage for resume parsing (~$0.01 per resume)
+- **Memory Usage**: 2-4GB RAM for model processing
+- **Storage**: Models require ~2GB disk space
+
+### **Privacy & Ethics**
+- **PII Removal**: Comprehensive removal of personal identifiers
+- **Bias Testing**: Category analysis helps detect algorithmic bias
+- **Fair Sampling**: Balanced category sampling prevents discrimination
+
+### **Research Validity**
+- **Statistical Rigor**: Confidence intervals and significance testing
+- **Reproducibility**: Deterministic processing with logging
+- **Transparency**: Full methodology documentation
+
+## 🔍 Troubleshooting
+
+### **Common Issues**
+
+**OpenAI API Errors**
 ```bash
-# Verify your .env file has the correct API key
-cat .env
+# Check API key
+cat .env | grep OPENAI_SECRET
+
+# Verify account credits and rate limits
 ```
 
-**Model Download Failures**: Ensure internet connection and retry
+**Model Loading Failures**
 ```bash
+# Re-download models
 python -m core.preprocessors.download_sentence_transformer
+
+# Check disk space (need 2GB+)
+df -h
 ```
 
-**Memory Issues**: For large datasets, consider processing in smaller batches
+**Memory Issues**
+```bash
+# Reduce batch size
+python runners/rank.py --num-resumes 10 --num-jobs 5
 
-## 📄 License
+# Monitor memory usage
+htop
+```
 
-[Add your license information here]
+**Poor Matching Results**
+```bash
+# Try different models
+python runners/rank.py --general-model sentence-transformers/all-mpnet-base-v2
+
+# Adjust weights
+python runners/rank.py --skills-weight 2.0 --general-weight 1.0
+```
+
+## 📄 Citation
+
+If you use this system in research, please cite:
+
+```bibtex
+@software{resume_job_ranking_system,
+  title={Multi-Dimensional Resume-Job Ranking System},
+  author={[Your Name]},
+  year={2024},
+  url={[Repository URL]}
+}
+```
 
 ## 🤝 Contributing
 
-[Add contribution guidelines here]
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/new-matcher`)
+3. Commit changes (`git commit -am 'Add new matching dimension'`)
+4. Push branch (`git push origin feature/new-matcher`)
+5. Create Pull Request
 
 ## 📞 Support
 
-[Add support/contact information here] 
+- **Documentation**: See [METHODOLOGY.md](METHODOLOGY.md) for detailed technical information
+- **Issues**: Use GitHub Issues for bug reports and feature requests
+- **Configuration**: See `rank.sh` for comprehensive parameter documentation
+
+## 📄 License
+
+[Add your license information here] 
