@@ -118,18 +118,20 @@ class DiversityAnalytics:
             # Check parsed JSON for name
             if isinstance(resume.get('parsed_json'), str):
                 parsed_data = json.loads(resume['parsed_json'])
-                name = parsed_data.get('basics', {}).get('name', '').lower()
+                name = parsed_data.get('basics', {}).get('name')
                 
-                if name:
-                    first_name = name.split()[0] if name.split() else ''
+                if name and isinstance(name, str):
+                    name_lower = name.lower()
+                    first_name = name_lower.split()[0] if name_lower.split() else ''
                     if first_name in self.female_names:
                         return 'Female'
                     elif first_name in self.male_names:
                         return 'Male'
             
             # Check resume text for gender indicators
-            resume_text = (resume.get('Resume_str', '') + ' ' + 
-                          resume.get('text_from_html', '')).lower()
+            resume_str = resume.get('Resume_str', '') or ''
+            text_from_html = resume.get('text_from_html', '') or ''
+            resume_text = (resume_str + ' ' + text_from_html).lower()
             
             female_count = sum(1 for indicator in self.gender_indicators['female'] 
                              if indicator in resume_text)

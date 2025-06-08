@@ -468,8 +468,10 @@ class EducationMatcher(BaseMatcher):
 
     def _extract_job_education_requirements(self, job: Dict[str, Any]) -> Dict[str, Any]:
         """Extract education requirements from job description."""
-        job_text = (job.get('Long Description', '') + ' ' + 
-                   job.get('Position', '')).lower()
+        # Safe string concatenation
+        long_desc = job.get('Long Description') or ''
+        position = job.get('Position') or ''
+        job_text = (long_desc + ' ' + position).lower()
         
         # Look for degree requirements in job description
         required_degrees = []
@@ -481,14 +483,14 @@ class EducationMatcher(BaseMatcher):
         required_fields = []
         for field_category, keywords in self.field_mappings.items():
             for keyword in keywords:
-                if keyword.lower() in job_text:
+                if keyword and keyword.lower() in job_text:
                     required_fields.append(field_category)
                     break
         
         # Also check keyword mappings
         for category, keywords in self.field_keywords.items():
             for keyword in keywords:
-                if keyword.lower() in job_text:
+                if keyword and keyword.lower() in job_text:
                     required_fields.append(category)
                     break
         
@@ -517,11 +519,13 @@ class EducationMatcher(BaseMatcher):
         # Get highest degree level from resume
         resume_max_level = 0
         for edu in resume_education:
-            study_type = edu.get('studyType', '').lower()
-            for degree_name, level in self.degree_levels.items():
-                if degree_name in study_type:
-                    resume_max_level = max(resume_max_level, level)
-                    break
+            study_type = edu.get('studyType') or ''
+            if study_type:
+                study_type_lower = study_type.lower()
+                for degree_name, level in self.degree_levels.items():
+                    if degree_name in study_type_lower:
+                        resume_max_level = max(resume_max_level, level)
+                        break
         
         # Get required degree level from job
         required_degrees = job_requirements.get('required_degrees', [])
@@ -557,17 +561,19 @@ class EducationMatcher(BaseMatcher):
         # Extract fields from resume education
         resume_fields = []
         for edu in resume_education:
-            area = edu.get('area', '').lower()
+            area = edu.get('area') or ''
             if area:
-                resume_fields.append(area)
+                area_lower = area.lower()
+                resume_fields.append(area_lower)
         
         if not resume_fields:
             return 0.4
             
         # Get job field requirements
-        job_text = (job.get('Long Description', '') + ' ' + 
-                   job.get('Position', '') + ' ' +
-                   job.get('Primary Keyword', '')).lower()
+        long_desc = job.get('Long Description') or ''
+        position = job.get('Position') or ''
+        primary_keyword = job.get('Primary Keyword') or ''
+        job_text = (long_desc + ' ' + position + ' ' + primary_keyword).lower()
         
         # Score field relevance using comprehensive mappings
         max_relevance = 0.0
@@ -642,10 +648,12 @@ class EducationMatcher(BaseMatcher):
             # Higher education can compensate for less experience
             max_degree_level = 0
             for edu in resume_education:
-                study_type = edu.get('studyType', '').lower()
-                for degree_name, level in self.degree_levels.items():
-                    if degree_name in study_type:
-                        max_degree_level = max(max_degree_level, level)
+                study_type = edu.get('studyType') or ''
+                if study_type:
+                    study_type_lower = study_type.lower()
+                    for degree_name, level in self.degree_levels.items():
+                        if degree_name in study_type_lower:
+                            max_degree_level = max(max_degree_level, level)
             
             # Adjusted experience based on education
             adjusted_experience = total_experience_years
