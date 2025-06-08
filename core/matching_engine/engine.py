@@ -9,6 +9,7 @@ from core.matching_engine.experience import ExperienceMatcher
 from core.matching_engine.general import GeneralMatcher
 from core.matching_engine.location import LocationMatcher
 from core.matching_engine.skills import SkillsMatcher
+from core.matching_engine.education import EducationMatcher
 from core.models import ResumeJobMatch
 from core.utils import log_message
 
@@ -32,6 +33,7 @@ def create_matching_engine(match: ResumeJobMatch, general_model: str = None, ski
     engine.register_matcher(ExperienceMatcher(match))
     engine.register_matcher(LocationMatcher(match))
     engine.register_matcher(SkillsMatcher(match, model_name=skills_model))
+    engine.register_matcher(EducationMatcher(match))
 
     return engine
 

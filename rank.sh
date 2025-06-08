@@ -71,6 +71,10 @@
 #                               # Default: 1.0
 #                               # Example: --location-weight 0.5
 #
+# --education-weight FLOAT      # Weight for education matching
+#                               # Default: 1.0
+#                               # Example: --education-weight 2.0
+#
 # NOTE: Weights are automatically normalized to sum to 1.0
 
 # -----------------------------------------------------------------------------
@@ -108,6 +112,22 @@
 # --verbose -v                  # Short form
 
 # -----------------------------------------------------------------------------
+# 🧠 ADVANCED FEATURES
+# -----------------------------------------------------------------------------
+# --explainable-ai              # Generate detailed explanations for rankings
+#                               # Creates JSON files with match explanations
+#
+# --diversity-analysis          # Perform diversity and bias analysis
+#                               # Generates bias reports and diversity metrics
+#
+# --learning-to-rank            # Use machine learning to improve rankings
+#                               # Trains ML models and generates enhanced rankings
+#
+# --ltr-model-type TYPE         # Learning-to-rank model type
+#                               # Options: linear, random_forest, gradient_boosting
+#                               # Default: gradient_boosting
+
+# -----------------------------------------------------------------------------
 # 📝 EXAMPLE CONFIGURATIONS
 # -----------------------------------------------------------------------------
 #
@@ -137,8 +157,12 @@ python runners/rank.py \
   --skills-weight 1.0 \
   --experience-weight 1.0 \
   --location-weight 1.0 \
+  --education-weight 1.0 \
   --resume-categories INFORMATION-TECHNOLOGY HR \
   --category-analysis \
   --top-k 10 \
   --model-comparison \
-  --models-to-compare sentence-transformers/careerbert-jg sentence-transformers/all-mpnet-base-v2
+  --models-to-compare sentence-transformers/careerbert-jg sentence-transformers/all-mpnet-base-v2 \
+  --explainable-ai \
+  --diversity-analysis \
+  --learning-to-rank

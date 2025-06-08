@@ -22,6 +22,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from core.models import Resume, JobDescription, ResumeJobMatch
 from core.matching_engine.engine import compute_resume_job_match
+from core.explainable_ai import ExplainableAI
+from core.diversity_analytics import DiversityAnalytics
+from core.learning_to_rank import LearningToRankEngine
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = 'logs'
@@ -271,7 +274,9 @@ def run_ranking(resumes: List[Resume], jobs: List[JobDescription],
                     'experience': match_data.get('experience', {}).get('score', 0.0) if isinstance(
                         match_data.get('experience'), dict) else 0.0,
                     'location': match_data.get('location', {}).get('score', 0.0) if isinstance(
-                        match_data.get('location'), dict) else 0.0
+                        match_data.get('location'), dict) else 0.0,
+                    'education': match_data.get('education', {}).get('score', 0.0) if isinstance(
+                        match_data.get('education'), dict) else 0.0
                 }
 
                 job_matches.append({
@@ -349,6 +354,7 @@ def save_results(results: List[Dict[str, Any]], output_file: str, category_analy
                 'skills_score': match['score_breakdown'].get('skills', 0),
                 'experience_score': match['score_breakdown'].get('experience', 0),
                 'location_score': match['score_breakdown'].get('location', 0),
+                'education_score': match['score_breakdown'].get('education', 0),
                 'resume_char_len': match['resume_char_len']
             })
 
@@ -385,6 +391,7 @@ def save_results(results: List[Dict[str, Any]], output_file: str, category_analy
                     'skills_score': match['score_breakdown'].get('skills', 0),
                     'experience_score': match['score_breakdown'].get('experience', 0),
                     'location_score': match['score_breakdown'].get('location', 0),
+                    'education_score': match['score_breakdown'].get('education', 0),
                     'resume_char_len': match['resume_char_len']
                 })
 
@@ -400,7 +407,8 @@ def save_results(results: List[Dict[str, Any]], output_file: str, category_analy
                 'general_score': 'mean',
                 'skills_score': 'mean',
                 'experience_score': 'mean',
-                'location_score': 'mean'
+                'location_score': 'mean',
+                'education_score': 'mean'
             }).round(2)
 
             logger.info("Performance by Resume Category (ALL PROCESSED RESUMES):")
@@ -415,6 +423,7 @@ def save_results(results: List[Dict[str, Any]], output_file: str, category_analy
                 logger.info(f"    - Avg Skills: {stats[('skills_score', 'mean')]}")
                 logger.info(f"    - Avg Experience: {stats[('experience_score', 'mean')]}")
                 logger.info(f"    - Avg Location: {stats[('location_score', 'mean')]}")
+                logger.info(f"    - Avg Education: {stats[('education_score', 'mean')]}")
 
             # Show top performers from each category
             logger.info("\nTop Performers by Category:")
@@ -616,6 +625,8 @@ def main():
                         help='Weight for experience matcher (default: 1.0)')
     parser.add_argument('--location-weight', type=float, default=1.0,
                         help='Weight for location matcher (default: 1.0)')
+    parser.add_argument('--education-weight', type=float, default=1.0,
+                        help='Weight for education matcher (default: 1.0)')
 
     # Sentence transformer model arguments
     parser.add_argument('--general-model', type=str, default=None,
@@ -642,6 +653,17 @@ def main():
     parser.add_argument('--no-balanced-categories', dest='balanced_categories', action='store_false',
                         help='Disable balanced category sampling')
 
+    # Advanced features arguments
+    parser.add_argument('--explainable-ai', action='store_true',
+                        help='Generate detailed explanations for rankings')
+    parser.add_argument('--diversity-analysis', action='store_true',
+                        help='Perform diversity and bias analysis')
+    parser.add_argument('--learning-to-rank', action='store_true',
+                        help='Use machine learning to improve rankings')
+    parser.add_argument('--ltr-model-type', type=str, default='gradient_boosting',
+                        choices=['linear', 'random_forest', 'gradient_boosting'],
+                        help='Learning-to-rank model type (default: gradient_boosting)')
+
     args = parser.parse_args()
 
     # Ensure output file is in logs directory
@@ -665,7 +687,8 @@ def main():
         'general': args.general_weight,
         'skills': args.skills_weight,
         'experience': args.experience_weight,
-        'location': args.location_weight
+        'location': args.location_weight,
+        'education': args.education_weight
     }
 
     # Normalize weights to sum to 1.0
@@ -679,7 +702,7 @@ def main():
     logger.info(f"Raw matcher weights: {raw_weights}")
     logger.info(f"Normalized weights (sum=1.0): {weights}")
     logger.info(
-        f"Weight distribution: General={weights['general']:.3f}, Skills={weights['skills']:.3f}, Experience={weights['experience']:.3f}, Location={weights['location']:.3f}")
+        f"Weight distribution: General={weights['general']:.3f}, Skills={weights['skills']:.3f}, Experience={weights['experience']:.3f}, Location={weights['location']:.3f}, Education={weights['education']:.3f}")
 
     # Log model configuration
     if args.model_comparison:
@@ -755,6 +778,154 @@ def main():
 
             # Save results
             save_results(results, args.output_file, args.category_analysis)
+
+            # Run advanced features if requested
+            if args.explainable_ai or args.diversity_analysis or args.learning_to_rank:
+                logger.info("=" * 60)
+                logger.info("RUNNING ADVANCED FEATURES")
+                logger.info("=" * 60)
+
+                # Flatten all results for advanced analysis
+                all_results = []
+                for job_result in results:
+                    for rank, match in enumerate(job_result['top_matches'], 1):
+                        result_entry = {
+                            'job_id': job_result['job_id'],
+                            'job_position': job_result['job_position'],
+                            'job_company': job_result['job_company'],
+                            'rank': rank,
+                            'resume_id': match['resume_id'],
+                            'resume_category': match['resume_category'],
+                            'total_score': match['total_score'],
+                            'general_score': match['score_breakdown'].get('general', 0),
+                            'skills_score': match['score_breakdown'].get('skills', 0),
+                            'experience_score': match['score_breakdown'].get('experience', 0),
+                            'location_score': match['score_breakdown'].get('location', 0),
+                            'education_score': match['score_breakdown'].get('education', 0)
+                        }
+                        all_results.append(result_entry)
+
+                # Explainable AI
+                if args.explainable_ai:
+                    logger.info("Generating explainable AI analysis...")
+                    explainer = ExplainableAI()
+                    
+                    # Generate explanations for top matches
+                    explanations = []
+                    for i, result in enumerate(all_results[:10]):  # Top 10 for detailed explanation
+                        # Find corresponding resume and job
+                        resume = next((r for r in resumes if r.ID == result['resume_id']), None)
+                        job = next((j for j in jobs if str(j.id) == str(result['job_id'])), None)
+                        
+                        if resume and job:
+                            scores = {
+                                'general': result['general_score'],
+                                'skills': result['skills_score'],
+                                'experience': result['experience_score'],
+                                'location': result['location_score'],
+                                'education': result['education_score']
+                            }
+                            
+                            explanation = explainer.explain_ranking(
+                                resume.__dict__, job.__dict__, scores, weights, all_results
+                            )
+                            explanations.append({
+                                'rank': result['rank'],
+                                'resume_id': result['resume_id'],
+                                'job_position': result['job_position'],
+                                'explanation': explanation
+                            })
+                    
+                    # Save explanations
+                    explanation_file = ensure_logs_directory(f"explanations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    import json
+                    import numpy as np
+                    
+                    # Custom JSON encoder to handle numpy types
+                    class NumpyEncoder(json.JSONEncoder):
+                        def default(self, obj):
+                            if isinstance(obj, np.integer):
+                                return int(obj)
+                            elif isinstance(obj, np.floating):
+                                return float(obj)
+                            elif isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                            elif isinstance(obj, np.bool_):
+                                return bool(obj)
+                            return super(NumpyEncoder, self).default(obj)
+                    
+                    with open(explanation_file, 'w') as f:
+                        json.dump(explanations, f, indent=2, cls=NumpyEncoder)
+                    logger.info(f"Explanations saved to: {explanation_file}")
+
+                # Diversity Analysis
+                if args.diversity_analysis:
+                    logger.info("Performing diversity and bias analysis...")
+                    diversity_analyzer = DiversityAnalytics()
+                    
+                    # Convert resumes to dict format for analysis
+                    resumes_dict = [resume.__dict__ for resume in resumes]
+                    
+                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict)
+                    
+                    # Save diversity analysis
+                    diversity_file = ensure_logs_directory(f"diversity_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    with open(diversity_file, 'w') as f:
+                        json.dump(diversity_analysis, f, indent=2, cls=NumpyEncoder)
+                    logger.info(f"Diversity analysis saved to: {diversity_file}")
+                    
+                    # Generate and save bias report
+                    bias_report = diversity_analyzer.generate_bias_report(all_results, resumes_dict)
+                    bias_report_file = ensure_logs_directory(f"bias_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                    with open(bias_report_file, 'w') as f:
+                        f.write(bias_report)
+                    logger.info(f"Bias report saved to: {bias_report_file}")
+
+                # Learning to Rank
+                if args.learning_to_rank:
+                    logger.info(f"Training learning-to-rank model ({args.ltr_model_type})...")
+                    ltr_engine = LearningToRankEngine(model_type=args.ltr_model_type)
+                    
+                    try:
+                        # Convert data for LTR
+                        resumes_dict = [resume.__dict__ for resume in resumes]
+                        jobs_dict = [job.__dict__ for job in jobs]
+                        
+                        # Prepare training data
+                        features, labels = ltr_engine.prepare_training_data(all_results, resumes_dict, jobs_dict)
+                        
+                        # Train model
+                        training_results = ltr_engine.train_model(features, labels)
+                        logger.info(f"Model training completed. Validation MSE: {training_results['val_mse']:.4f}")
+                        
+                        # Re-rank using ML model
+                        ml_results = ltr_engine.rank_candidates(all_results, resumes_dict, jobs_dict)
+                        
+                        # Save ML results
+                        ml_results_file = ensure_logs_directory(f"ml_ranking_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+                        ml_df = pd.DataFrame(ml_results)
+                        ml_df.to_csv(ml_results_file, index=False)
+                        logger.info(f"ML ranking results saved to: {ml_results_file}")
+                        
+                        # Save model
+                        model_file = ensure_logs_directory(f"ltr_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl")
+                        ltr_engine.save_model(model_file)
+                        logger.info(f"Trained model saved to: {model_file}")
+                        
+                        # Generate feature importance report
+                        importance_report = ltr_engine.get_feature_importance_report()
+                        importance_file = ensure_logs_directory(f"feature_importance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                        with open(importance_file, 'w') as f:
+                            f.write(importance_report)
+                        logger.info(f"Feature importance report saved to: {importance_file}")
+                        
+                        # Evaluate ranking quality
+                        evaluation = ltr_engine.evaluate_ranking_quality(all_results, ml_results)
+                        logger.info(f"Ranking correlation: {evaluation['ranking_correlation']:.3f}")
+                        logger.info(f"Score improvement: {evaluation['score_improvement']['improvement']:.3f}")
+                        
+                    except Exception as e:
+                        logger.error(f"Learning-to-rank failed: {e}")
 
             logger.info("=" * 60)
             logger.info("RANKING COMPLETED SUCCESSFULLY")
