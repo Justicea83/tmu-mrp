@@ -10,6 +10,13 @@ import numpy as np
 from typing import Dict, List, Any, Tuple, Optional
 import logging
 
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+    shap = None
+
 
 class ExplainableAI:
     """
@@ -42,10 +49,14 @@ class ExplainableAI:
             'location': 'geographic compatibility',
             'education': 'educational background and requirements'
         }
+        
+        # SHAP explainer (will be initialized when needed)
+        self.shap_explainer = None
+        self.shap_background_data = None
 
     def explain_ranking(self, resume: Dict[str, Any], job: Dict[str, Any], 
                        scores: Dict[str, float], weights: Dict[str, float],
-                       all_results: List[Dict] = None) -> Dict[str, Any]:
+                       all_results: List[Dict] = None, use_shap: bool = True) -> Dict[str, Any]:
         """
         Generate comprehensive explanation for a resume-job ranking.
         
@@ -55,6 +66,7 @@ class ExplainableAI:
             scores: Dictionary of individual dimension scores
             weights: Dictionary of dimension weights
             all_results: All ranking results for comparative analysis
+            use_shap: Whether to include SHAP-based explanations
             
         Returns:
             Dict containing detailed explanation
@@ -73,6 +85,12 @@ class ExplainableAI:
         if all_results:
             explanation['comparative_analysis'] = self._generate_comparative_analysis(
                 resume, job, scores, all_results
+            )
+        
+        # Add SHAP explanations if requested and available
+        if use_shap and SHAP_AVAILABLE:
+            explanation['shap_analysis'] = self.explain_with_shap(
+                resume, job, scores, weights, all_results
             )
         
         return explanation
@@ -541,6 +559,287 @@ class ExplainableAI:
                 most_discriminative = dimension
         
         return most_discriminative
+
+    def explain_with_shap(self, resume: Dict[str, Any], job: Dict[str, Any], 
+                         scores: Dict[str, float], weights: Dict[str, float],
+                         all_results: List[Dict] = None) -> Dict[str, Any]:
+        """
+        Generate SHAP-based explanations for ranking decisions.
+        
+        Args:
+            resume: Resume data
+            job: Job description data  
+            scores: Individual dimension scores
+            weights: Dimension weights
+            all_results: All ranking results for background distribution
+            
+        Returns:
+            Dict containing SHAP explanations and visualizations
+        """
+        
+        if not SHAP_AVAILABLE:
+            self.logger.warning("SHAP not available. Install with: pip install shap")
+            return {'error': 'SHAP not installed'}
+        
+        try:
+            # Prepare data for SHAP
+            feature_names = list(scores.keys())
+            current_scores = np.array([scores[dim] for dim in feature_names])
+            current_weights = np.array([weights[dim] for dim in feature_names])
+            
+            # Create weighted scoring function
+            def weighted_scoring_function(score_matrix):
+                """Function that SHAP will explain."""
+                if score_matrix.ndim == 1:
+                    score_matrix = score_matrix.reshape(1, -1)
+                
+                weighted_scores = score_matrix * current_weights
+                return np.sum(weighted_scores, axis=1) / np.sum(current_weights)
+            
+            # Initialize background data if not available
+            if self.shap_background_data is None and all_results:
+                self.shap_background_data = self._prepare_background_data(all_results, feature_names)
+            
+            # Use background data or create simple baseline
+            if self.shap_background_data is not None:
+                background_data = self.shap_background_data
+            else:
+                # Create simple background with average scores
+                background_data = np.array([[50.0] * len(feature_names)])  # 50% baseline
+            
+            # Create SHAP explainer
+            explainer = shap.Explainer(weighted_scoring_function, background_data)
+            
+            # Calculate SHAP values
+            shap_values = explainer(current_scores.reshape(1, -1))
+            
+            # Extract SHAP explanation data
+            shap_explanation = {
+                'base_value': float(shap_values.base_values[0]),
+                'feature_contributions': {},
+                'expected_value': float(shap_values.base_values[0]),
+                'predicted_value': float(weighted_scoring_function(current_scores)),
+                'feature_importance_ranking': []
+            }
+            
+            # Process individual feature contributions
+            for i, feature_name in enumerate(feature_names):
+                contribution = float(shap_values.values[0][i])
+                shap_explanation['feature_contributions'][feature_name] = {
+                    'shap_value': contribution,
+                    'feature_value': float(current_scores[i]),
+                    'weight': float(current_weights[i]),
+                    'contribution_magnitude': abs(contribution),
+                    'contribution_direction': 'positive' if contribution > 0 else 'negative'
+                }
+            
+            # Rank features by importance (absolute SHAP value)
+            feature_importance = [(name, abs(shap_explanation['feature_contributions'][name]['shap_value'])) 
+                                for name in feature_names]
+            feature_importance.sort(key=lambda x: x[1], reverse=True)
+            shap_explanation['feature_importance_ranking'] = [name for name, _ in feature_importance]
+            
+            # Add interpretations
+            shap_explanation['interpretation'] = self._interpret_shap_values(
+                shap_explanation, scores, weights
+            )
+            
+            # Add what-if analysis
+            shap_explanation['what_if_analysis'] = self._generate_what_if_analysis(
+                weighted_scoring_function, current_scores, feature_names, current_weights
+            )
+            
+            return shap_explanation
+            
+        except Exception as e:
+            self.logger.error(f"Error generating SHAP explanations: {e}")
+            return {'error': f'SHAP explanation failed: {str(e)}'}
+
+    def _prepare_background_data(self, all_results: List[Dict], feature_names: List[str]) -> np.ndarray:
+        """Prepare background data for SHAP from all ranking results."""
+        
+        background_scores = []
+        for result in all_results:
+            score_row = []
+            for feature in feature_names:
+                score_key = f'{feature}_score'
+                score_row.append(result.get(score_key, 0.0))
+            background_scores.append(score_row)
+        
+        return np.array(background_scores)
+
+    def _interpret_shap_values(self, shap_explanation: Dict, scores: Dict[str, float], 
+                              weights: Dict[str, float]) -> Dict[str, Any]:
+        """Provide human-readable interpretation of SHAP values."""
+        
+        interpretations = {
+            'summary': '',
+            'key_drivers': [],
+            'key_detractors': [],
+            'relative_importance': {}
+        }
+        
+        # Sort features by SHAP value magnitude
+        contributions = shap_explanation['feature_contributions']
+        sorted_features = sorted(contributions.items(), 
+                               key=lambda x: abs(x[1]['shap_value']), reverse=True)
+        
+        # Identify top positive and negative contributors
+        positive_contributors = [(name, data) for name, data in sorted_features 
+                               if data['shap_value'] > 0]
+        negative_contributors = [(name, data) for name, data in sorted_features 
+                               if data['shap_value'] < 0]
+        
+        # Generate summary
+        if positive_contributors:
+            top_driver = positive_contributors[0]
+            interpretations['summary'] = f"The strongest driver of this match is {top_driver[0]} " \
+                                       f"(contributing +{top_driver[1]['shap_value']:.3f} to the score)"
+        
+        # Key drivers (top 3 positive)
+        interpretations['key_drivers'] = [
+            {
+                'dimension': name,
+                'shap_contribution': data['shap_value'],
+                'raw_score': scores[name],
+                'interpretation': f"{name.title()} strongly supports this match "
+                                f"(score: {scores[name]:.1f}, SHAP: +{data['shap_value']:.3f})"
+            }
+            for name, data in positive_contributors[:3]
+        ]
+        
+        # Key detractors (top 3 negative)
+        interpretations['key_detractors'] = [
+            {
+                'dimension': name,
+                'shap_contribution': data['shap_value'],
+                'raw_score': scores[name],
+                'interpretation': f"{name.title()} weakens this match "
+                                f"(score: {scores[name]:.1f}, SHAP: {data['shap_value']:.3f})"
+            }
+            for name, data in negative_contributors[:3]
+        ]
+        
+        # Relative importance (normalized SHAP values)
+        total_magnitude = sum(abs(data['shap_value']) for data in contributions.values())
+        if total_magnitude > 0:
+            interpretations['relative_importance'] = {
+                name: {
+                    'importance_percentage': abs(data['shap_value']) / total_magnitude * 100,
+                    'contribution_type': 'positive' if data['shap_value'] > 0 else 'negative'
+                }
+                for name, data in contributions.items()
+            }
+        
+        return interpretations
+
+    def _generate_what_if_analysis(self, scoring_function, current_scores: np.ndarray, 
+                                  feature_names: List[str], weights: np.ndarray) -> Dict[str, Any]:
+        """Generate what-if analysis showing impact of score changes."""
+        
+        what_if = {
+            'score_improvements': {},
+            'score_impacts': {},
+            'optimization_suggestions': []
+        }
+        
+        current_total = scoring_function(current_scores)[0]
+        
+        # Analyze impact of improving each dimension
+        for i, feature_name in enumerate(feature_names):
+            # Test 10-point improvement
+            modified_scores = current_scores.copy()
+            modified_scores[i] = min(100.0, current_scores[i] + 10)
+            new_total = scoring_function(modified_scores)[0]
+            improvement_impact = new_total - current_total
+            
+            what_if['score_improvements'][feature_name] = {
+                'current_score': float(current_scores[i]),
+                'improved_score': float(modified_scores[i]),
+                'total_impact': float(improvement_impact),
+                'roi': float(improvement_impact / 10) if improvement_impact > 0 else 0  # Return on investment per point
+            }
+        
+        # Generate optimization suggestions based on ROI
+        roi_ranking = sorted(what_if['score_improvements'].items(), 
+                           key=lambda x: x[1]['roi'], reverse=True)
+        
+        for feature_name, analysis in roi_ranking[:3]:  # Top 3 suggestions
+            if analysis['roi'] > 0:
+                what_if['optimization_suggestions'].append({
+                    'dimension': feature_name,
+                    'suggestion': f"Improving {feature_name} by 10 points would increase total score by {analysis['total_impact']:.2f}",
+                    'roi': analysis['roi'],
+                    'priority': 'High' if analysis['roi'] > 0.5 else 'Medium'
+                })
+        
+        return what_if
+
+    def generate_shap_summary(self, all_results: List[Dict], 
+                             all_scores: List[Dict[str, float]], 
+                             weights: Dict[str, float]) -> Dict[str, Any]:
+        """Generate SHAP-based summary across all candidates."""
+        
+        if not SHAP_AVAILABLE:
+            return {'error': 'SHAP not available'}
+        
+        try:
+            feature_names = list(weights.keys())
+            
+            # Prepare data matrix
+            score_matrix = []
+            for scores in all_scores:
+                score_row = [scores.get(dim, 0.0) for dim in feature_names]
+                score_matrix.append(score_row)
+            
+            score_matrix = np.array(score_matrix)
+            weight_array = np.array([weights[dim] for dim in feature_names])
+            
+            # Create scoring function
+            def weighted_scoring_function(scores):
+                if scores.ndim == 1:
+                    scores = scores.reshape(1, -1)
+                weighted = scores * weight_array
+                return np.sum(weighted, axis=1) / np.sum(weight_array)
+            
+            # Create explainer with mean as background
+            background = np.mean(score_matrix, axis=0).reshape(1, -1)
+            explainer = shap.Explainer(weighted_scoring_function, background)
+            
+            # Calculate SHAP values for all candidates
+            shap_values = explainer(score_matrix)
+            
+            # Aggregate insights
+            summary = {
+                'global_feature_importance': {},
+                'feature_impact_distribution': {},
+                'cohort_insights': {}
+            }
+            
+            # Calculate mean absolute SHAP values (global importance)
+            mean_abs_shap = np.mean(np.abs(shap_values.values), axis=0)
+            for i, feature_name in enumerate(feature_names):
+                summary['global_feature_importance'][feature_name] = {
+                    'mean_absolute_impact': float(mean_abs_shap[i]),
+                    'rank': int(np.argsort(-mean_abs_shap)[i]) + 1
+                }
+            
+            # Feature impact distribution
+            for i, feature_name in enumerate(feature_names):
+                feature_shap_values = shap_values.values[:, i]
+                summary['feature_impact_distribution'][feature_name] = {
+                    'mean_impact': float(np.mean(feature_shap_values)),
+                    'std_impact': float(np.std(feature_shap_values)),
+                    'positive_impact_count': int(np.sum(feature_shap_values > 0)),
+                    'negative_impact_count': int(np.sum(feature_shap_values < 0)),
+                    'neutral_impact_count': int(np.sum(feature_shap_values == 0))
+                }
+            
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"Error generating SHAP summary: {e}")
+            return {'error': f'SHAP summary failed: {str(e)}'}
 
     def _assess_candidate_pool_quality(self, all_results: List[Dict]) -> str:
         """Assess overall quality of candidate pool."""

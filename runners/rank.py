@@ -823,7 +823,7 @@ def main():
                             }
                             
                             explanation = explainer.explain_ranking(
-                                resume.__dict__, job.__dict__, scores, weights, all_results
+                                resume.__dict__, job.__dict__, scores, weights, all_results, use_shap=True
                             )
                             explanations.append({
                                 'rank': result['rank'],
@@ -979,7 +979,7 @@ def main():
                             }
                             
                             explanation = explainer.explain_ranking(
-                                resume.__dict__, job.__dict__, scores, weights, all_results
+                                resume.__dict__, job.__dict__, scores, weights, all_results, use_shap=True
                             )
                             explanations.append({
                                 'rank': result['rank'],

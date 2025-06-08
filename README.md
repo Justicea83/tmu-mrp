@@ -297,9 +297,15 @@ python-dotenv>=1.0.0
 tqdm>=4.65.0
 ```
 
-**Important**: After installing spaCy, download the English language model:
+**Important**: After installing dependencies:
+1. Download the English language model:
 ```bash
 python -m spacy download en_core_web_lg
+```
+
+2. For advanced explainable AI features with SHAP:
+```bash
+pip install shap==0.43.0
 ```
 
 ## 🚨 Important Considerations
