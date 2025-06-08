@@ -114,11 +114,16 @@ class LearningToRankEngine:
         
         features = []
         
-        # Basic resume statistics
-        features.append(resume.get('char_len', 0) / 1000.0)  # Normalized character length
-        features.append(resume.get('sent_len', 0) / 50.0)    # Normalized sentence count
-        features.append(resume.get('type_token_ratio', 0.0)) # Linguistic diversity
-        features.append(resume.get('gender_term_count', 0) / 10.0)  # Normalized gender terms
+        # Basic resume statistics (with safe type conversion)
+        char_len = self._safe_numeric_conversion(resume.get('char_len', 0))
+        sent_len = self._safe_numeric_conversion(resume.get('sent_len', 0))
+        type_token_ratio = self._safe_numeric_conversion(resume.get('type_token_ratio', 0.0))
+        gender_term_count = self._safe_numeric_conversion(resume.get('gender_term_count', 0))
+        
+        features.append(char_len / 1000.0)  # Normalized character length
+        features.append(sent_len / 50.0)    # Normalized sentence count
+        features.append(type_token_ratio)   # Linguistic diversity
+        features.append(gender_term_count / 10.0)  # Normalized gender terms
         
         # Category encoding (one-hot)
         category = resume.get('Category', 'UNKNOWN').upper()
@@ -281,6 +286,29 @@ class LearningToRankEngine:
             return 0.0
         match = re.search(r'(\d+)', str(exp_string))
         return float(match.group(1)) if match else 0.0
+
+    def _safe_numeric_conversion(self, value: Any) -> float:
+        """Safely convert any value to float, handling strings and other types."""
+        try:
+            if value is None:
+                return 0.0
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                # Try to extract numeric value from string
+                import re
+                if value.strip() == '' or value.lower() in ['none', 'null', 'n/a', 'na']:
+                    return 0.0
+                # Try direct conversion first
+                try:
+                    return float(value)
+                except ValueError:
+                    # Extract first number from string
+                    match = re.search(r'(\d+\.?\d*)', value)
+                    return float(match.group(1)) if match else 0.0
+            return 0.0
+        except (ValueError, AttributeError, TypeError):
+            return 0.0
 
     def prepare_training_data(self, ranking_results: List[Dict], 
                             resumes_data: List[Dict], jobs_data: List[Dict],
