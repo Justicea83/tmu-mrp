@@ -1,0 +1,18 @@
+{
+  "label_smoothing":0.05,
+  "labels":[
+    "B-DOMAIN",
+    "B-EXPERIENCE",
+    "B-OCCUPATION",
+    "B-QUALIFICATION",
+    "B-SKILL",
+    "I-DOMAIN",
+    "I-EXPERIENCE",
+    "I-OCCUPATION",
+    "I-QUALIFICATION",
+    "I-SKILL",
+    "O"
+  ],
+  "neg_prefix":"!",
+  "overwrite":false
+}

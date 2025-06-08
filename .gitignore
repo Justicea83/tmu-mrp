@@ -1,0 +1,6 @@
+.env
+/.idea
+datasets/resumes.csv
+datasets/job_descriptions.csv
+sentence-transformers/*
+/logs
