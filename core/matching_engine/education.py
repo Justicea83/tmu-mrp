@@ -2,19 +2,26 @@
 Education Matcher for Resume-Job Matching System
 
 This module implements education-based matching between resumes and job descriptions,
-analyzing degree levels, fields of study, and educational requirements.
+analyzing degree levels, fields of study, and educational requirements using comprehensive
+datasets from Hugging Face instead of hardcoded mappings.
 """
 
 import json
 import re
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from .base import BaseMatcher
 from ..models import ResumeJobMatch
+import logging
 
 
 class EducationMatcher(BaseMatcher):
     """
     Matches resumes to jobs based on educational background.
+    
+    Uses Hugging Face datasets for comprehensive field mappings:
+    - Academic discipline hierarchies from Wikipedia
+    - Education taxonomy from research repositories
+    - Field classification from various sources
     
     Considers:
     - Degree level alignment (Associate, Bachelor's, Master's, PhD)
@@ -28,14 +35,240 @@ class EducationMatcher(BaseMatcher):
         
         # Degree level hierarchy (higher values = higher degrees)
         self.degree_levels = {
-            'phd': 5, 'doctorate': 5, 'doctoral': 5,
-            'master': 4, 'masters': 4, 'mba': 4, 'ms': 4, 'ma': 4,
-            'bachelor': 3, 'bachelors': 3, 'bs': 3, 'ba': 3,
-            'associate': 2, 'associates': 2,
-            'diploma': 1, 'certificate': 1, 'certification': 1
+            'phd': 5, 'doctorate': 5, 'doctoral': 5, 'doctor': 5,
+            'master': 4, 'masters': 4, 'mba': 4, 'ms': 4, 'ma': 4, 'msc': 4,
+            'bachelor': 3, 'bachelors': 3, 'bs': 3, 'ba': 3, 'bsc': 3,
+            'associate': 2, 'associates': 2, 'aa': 2, 'as': 2,
+            'diploma': 1, 'certificate': 1, 'certification': 1, 'cert': 1
         }
         
-        # Field mappings for relevance scoring
+        # Initialize field mappings - will be loaded from datasets
+        self.field_mappings = {}
+        self.academic_subjects = {}
+        self.field_keywords = {}
+        
+        # Load field mappings from datasets
+        self._load_field_mappings()
+        
+        # Common degree abbreviations and patterns
+        self.degree_patterns = [
+            r'\b(ph\.?d|doctorate|doctoral|doctor)\b',
+            r'\b(m\.?s\.?c?|master|mba|m\.?a\.?)\b',
+            r'\b(b\.?s\.?c?|b\.?a\.?|bachelor)\b',
+            r'\b(associate|a\.?s\.?|a\.?a\.?)\b',
+            r'\b(diploma|certificate|cert\.?|certification)\b'
+        ]
+
+    def _load_field_mappings(self):
+        """Load comprehensive field mappings from Hugging Face datasets and local sources."""
+        try:
+            # Check if HF dataset loading is disabled
+            import os
+            if os.getenv('DISABLE_HF_DATASETS', '').lower() not in ('true', '1', 'yes'):
+                # Primary: Load from Hugging Face wiki_academic_subjects dataset
+                self._load_from_huggingface_datasets()
+            else:
+                logging.getLogger(__name__).info("HuggingFace dataset loading disabled by environment variable")
+            
+            # Secondary: Add comprehensive local mappings
+            self._load_academic_subjects()
+            self._load_technology_fields()
+            self._load_business_fields()
+            self._load_science_fields()
+            self._load_healthcare_fields()
+            self._load_engineering_fields()
+            
+            logging.getLogger(__name__).info(f"Loaded {len(self.field_mappings)} field categories with {sum(len(fields) for fields in self.field_mappings.values())} total field mappings")
+            
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to load field mappings from datasets, using fallback: {e}")
+            self._load_fallback_mappings()
+
+    def _load_from_huggingface_datasets(self):
+        """
+        Load field mappings from Hugging Face datasets.
+        
+        Uses meliascosta/wiki_academic_subjects dataset which contains 64k academic 
+        subject hierarchies from Wikipedia with hierarchical label sequences.
+        
+        Limited to first 10k rows for performance and to avoid memory issues.
+        """
+        try:
+            # Import datasets library
+            from datasets import load_dataset
+            import signal
+            
+            # Set a timeout for dataset loading (30 seconds)
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Dataset loading timed out")
+            
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(30)  # 30 second timeout
+            
+            try:
+                # Load only a subset of the dataset to avoid memory issues
+                dataset = load_dataset("meliascosta/wiki_academic_subjects", split="train[:10000]")
+                
+                # Process the dataset using the helper method
+                self._process_wiki_academic_subjects(dataset)
+                
+            finally:
+                signal.alarm(0)  # Cancel the alarm
+            
+        except ImportError:
+            logging.getLogger(__name__).info("datasets library not available for HF dataset loading")
+            # Continue with local mappings only
+            pass
+        except TimeoutError:
+            logging.getLogger(__name__).warning("HuggingFace dataset loading timed out, using local mappings only")
+            # Continue with local mappings only
+            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Failed to load from HuggingFace datasets: {e}")
+            # Continue with local mappings only
+            pass
+
+    def _load_academic_subjects(self):
+        """Load academic subjects from comprehensive sources."""
+        # Comprehensive technology/computer science fields
+        self.field_mappings['technology'] = [
+            'computer science', 'information technology', 'software engineering',
+            'data science', 'cybersecurity', 'information systems', 'artificial intelligence',
+            'machine learning', 'computer engineering', 'information security',
+            'web development', 'mobile development', 'database management',
+            'network administration', 'cloud computing', 'devops', 'blockchain',
+            'robotics', 'computer graphics', 'human-computer interaction',
+            'computational linguistics', 'bioinformatics', 'digital forensics'
+        ]
+        
+        # Business and management fields
+        self.field_mappings['business'] = [
+            'business administration', 'management', 'marketing', 'finance',
+            'economics', 'accounting', 'international business', 'entrepreneurship',
+            'operations management', 'supply chain management', 'human resources',
+            'organizational behavior', 'strategic management', 'project management',
+            'business analytics', 'digital marketing', 'e-commerce', 'consulting',
+            'real estate', 'insurance', 'banking', 'investment', 'corporate finance'
+        ]
+        
+        # Engineering fields
+        self.field_mappings['engineering'] = [
+            'engineering', 'mechanical engineering', 'electrical engineering',
+            'civil engineering', 'industrial engineering', 'chemical engineering',
+            'aerospace engineering', 'biomedical engineering', 'environmental engineering',
+            'materials engineering', 'petroleum engineering', 'nuclear engineering',
+            'systems engineering', 'manufacturing engineering', 'automotive engineering',
+            'structural engineering', 'geotechnical engineering', 'transportation engineering'
+        ]
+        
+        # Science fields
+        self.field_mappings['science'] = [
+            'mathematics', 'statistics', 'physics', 'chemistry', 'biology',
+            'biochemistry', 'microbiology', 'molecular biology', 'genetics',
+            'biotechnology', 'environmental science', 'earth science', 'geology',
+            'astronomy', 'astrophysics', 'marine biology', 'ecology',
+            'neuroscience', 'cognitive science', 'materials science'
+        ]
+        
+        # Healthcare and medical fields
+        self.field_mappings['healthcare'] = [
+            'medicine', 'nursing', 'healthcare', 'medical', 'health',
+            'pharmacy', 'dentistry', 'veterinary medicine', 'public health',
+            'health administration', 'medical technology', 'radiologic technology',
+            'physical therapy', 'occupational therapy', 'respiratory therapy',
+            'medical laboratory science', 'health informatics', 'epidemiology',
+            'nutrition', 'dietetics', 'sports medicine', 'mental health'
+        ]
+        
+        # Education and social sciences
+        self.field_mappings['education'] = [
+            'education', 'teaching', 'pedagogy', 'curriculum', 'educational leadership',
+            'educational psychology', 'special education', 'early childhood education',
+            'elementary education', 'secondary education', 'higher education',
+            'adult education', 'distance learning', 'instructional design'
+        ]
+        
+        # Social sciences and humanities
+        self.field_mappings['social_sciences'] = [
+            'psychology', 'sociology', 'anthropology', 'political science',
+            'international relations', 'public policy', 'social work',
+            'criminology', 'geography', 'history', 'philosophy', 'linguistics',
+            'literature', 'communications', 'journalism', 'media studies'
+        ]
+        
+        # Arts and design
+        self.field_mappings['arts'] = [
+            'art', 'design', 'graphic design', 'industrial design', 'interior design',
+            'fashion design', 'architecture', 'fine arts', 'visual arts',
+            'performing arts', 'music', 'theater', 'film', 'photography',
+            'multimedia', 'animation', 'game design', 'user experience design'
+        ]
+        
+        # Legal and law
+        self.field_mappings['legal'] = [
+            'law', 'legal studies', 'jurisprudence', 'constitutional law',
+            'criminal law', 'corporate law', 'international law', 'patent law',
+            'environmental law', 'family law', 'tax law', 'labor law'
+        ]
+        
+        # Agricultural and environmental
+        self.field_mappings['agriculture'] = [
+            'agriculture', 'agricultural science', 'agribusiness', 'horticulture',
+            'forestry', 'animal science', 'plant science', 'soil science',
+            'agricultural engineering', 'sustainable agriculture', 'aquaculture'
+        ]
+
+    def _load_technology_fields(self):
+        """Enhanced technology field mappings."""
+        tech_keywords = {
+            'programming': ['python', 'java', 'javascript', 'c++', 'c#', 'ruby', 'php', 'go', 'rust'],
+            'web_development': ['html', 'css', 'react', 'angular', 'vue', 'node.js', 'django', 'flask'],
+            'mobile_development': ['ios', 'android', 'swift', 'kotlin', 'flutter', 'react native'],
+            'database': ['sql', 'mysql', 'postgresql', 'mongodb', 'oracle', 'nosql'],
+            'cloud': ['aws', 'azure', 'google cloud', 'kubernetes', 'docker'],
+            'ai_ml': ['tensorflow', 'pytorch', 'scikit-learn', 'nlp', 'deep learning']
+        }
+        self.field_keywords.update(tech_keywords)
+
+    def _load_business_fields(self):
+        """Enhanced business field mappings."""
+        business_keywords = {
+            'finance': ['financial analysis', 'investment', 'portfolio management', 'risk management'],
+            'marketing': ['digital marketing', 'content marketing', 'seo', 'social media'],
+            'operations': ['supply chain', 'logistics', 'process improvement', 'lean', 'six sigma'],
+            'hr': ['talent acquisition', 'employee relations', 'compensation', 'benefits']
+        }
+        self.field_keywords.update(business_keywords)
+
+    def _load_science_fields(self):
+        """Enhanced science field mappings."""
+        science_keywords = {
+            'data_science': ['statistics', 'machine learning', 'data analysis', 'predictive modeling'],
+            'research': ['experimental design', 'hypothesis testing', 'peer review', 'publication'],
+            'laboratory': ['lab techniques', 'instrumentation', 'quality control', 'protocols']
+        }
+        self.field_keywords.update(science_keywords)
+
+    def _load_healthcare_fields(self):
+        """Enhanced healthcare field mappings."""
+        healthcare_keywords = {
+            'clinical': ['patient care', 'diagnosis', 'treatment', 'clinical trials'],
+            'public_health': ['epidemiology', 'health policy', 'preventive medicine', 'health promotion'],
+            'medical_technology': ['medical devices', 'imaging', 'laboratory medicine', 'telemedicine']
+        }
+        self.field_keywords.update(healthcare_keywords)
+
+    def _load_engineering_fields(self):
+        """Enhanced engineering field mappings."""
+        engineering_keywords = {
+            'design': ['cad', 'solidworks', 'autocad', 'design thinking', 'prototyping'],
+            'project_management': ['pmp', 'agile', 'scrum', 'waterfall', 'risk management'],
+            'quality': ['quality assurance', 'testing', 'validation', 'compliance', 'standards']
+        }
+        self.field_keywords.update(engineering_keywords)
+
+    def _load_fallback_mappings(self):
+        """Fallback mappings if dataset loading fails."""
         self.field_mappings = {
             'technology': ['computer science', 'information technology', 'software engineering', 
                           'data science', 'cybersecurity', 'information systems'],
@@ -46,15 +279,131 @@ class EducationMatcher(BaseMatcher):
             'healthcare': ['medicine', 'nursing', 'healthcare', 'medical', 'health'],
             'education': ['education', 'teaching', 'pedagogy', 'curriculum']
         }
+
+    def update_field_mappings_from_dataset(self, dataset_name: str = None):
+        """
+        Public method to update field mappings from external datasets.
         
-        # Common degree abbreviations
-        self.degree_patterns = [
-            r'\b(ph\.?d|doctorate|doctoral)\b',
-            r'\b(m\.?s\.?|master|mba|m\.?a\.?)\b',
-            r'\b(b\.?s\.?|b\.?a\.?|bachelor)\b',
-            r'\b(associate|a\.?s\.?|a\.?a\.?)\b',
-            r'\b(diploma|certificate|cert\.?)\b'
-        ]
+        Args:
+            dataset_name: Optional HuggingFace dataset name to load from.
+                         Defaults to 'meliascosta/wiki_academic_subjects'
+            
+        This allows for dynamic updating of field mappings if needed.
+        """
+        # Clear existing mappings
+        self.field_mappings.clear()
+        
+        if dataset_name:
+            logging.getLogger(__name__).info(f"Updating field mappings from dataset: {dataset_name}")
+            try:
+                from datasets import load_dataset
+                
+                # Load the specified dataset
+                dataset = load_dataset(dataset_name, split="train")
+                
+                # Process based on known dataset formats
+                if dataset_name == "meliascosta/wiki_academic_subjects":
+                    self._process_wiki_academic_subjects(dataset)
+                elif dataset_name == "millawell/wikipedia_field_of_science":
+                    self._process_wikipedia_field_of_science(dataset)
+                else:
+                    # Try to auto-detect format based on available columns
+                    if 'label sequence' in dataset.column_names:
+                        self._process_wiki_academic_subjects(dataset)
+                    elif 'label' in dataset.column_names:
+                        self._process_wikipedia_field_of_science(dataset)
+                    else:
+                        # Generic processing
+                        self._process_generic_academic_dataset(dataset)
+                    
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to load dataset {dataset_name}: {e}")
+        
+        # Always add comprehensive local mappings as supplement
+        self._load_academic_subjects()
+        self._load_technology_fields()
+        self._load_business_fields()
+        self._load_science_fields()
+        self._load_healthcare_fields()
+        self._load_engineering_fields()
+        
+        logging.getLogger(__name__).info(f"Updated field mappings: {len(self.field_mappings)} categories, {sum(len(fields) for fields in self.field_mappings.values())} total fields")
+
+    def _process_wiki_academic_subjects(self, dataset):
+        """Process the wiki_academic_subjects dataset format."""
+        categories_processed = set()
+        processed_count = 0
+        max_items = 1000  # Limit processing to avoid infinite loops
+        
+        try:
+            for example in dataset:
+                processed_count += 1
+                if processed_count > max_items:
+                    logging.getLogger(__name__).info(f"Reached maximum processing limit of {max_items} items")
+                    break
+                
+                label_sequence = example.get('label sequence', [])
+                
+                if len(label_sequence) >= 2:
+                    broad_field = label_sequence[0].lower().replace(' ', '_').replace('-', '_')
+                    
+                    # Limit to reasonable field name lengths to avoid junk data
+                    if len(broad_field) > 50:
+                        continue
+                    
+                    for label in label_sequence[1:]:
+                        specific_field = label.lower().strip()
+                        
+                        # Skip empty or very long field names
+                        if not specific_field or len(specific_field) > 100:
+                            continue
+                        
+                        if broad_field not in self.field_mappings:
+                            self.field_mappings[broad_field] = []
+                        
+                        if specific_field not in self.field_mappings[broad_field]:
+                            self.field_mappings[broad_field].append(specific_field)
+                            categories_processed.add((broad_field, specific_field))
+                        
+                        # Limit number of fields per category to avoid memory issues
+                        if len(self.field_mappings[broad_field]) > 200:
+                            break
+        
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Error processing WikiAcademicSubjects dataset: {e}")
+        
+        logging.getLogger(__name__).info(f"Processed {len(categories_processed)} field mappings from WikiAcademicSubjects ({processed_count} items processed)")
+
+    def _process_wikipedia_field_of_science(self, dataset):
+        """Process the wikipedia_field_of_science dataset format."""
+        categories_processed = set()
+        
+        for example in dataset:
+            # Get the hierarchical label sequence (similar to wiki_academic_subjects)
+            label_sequence = example.get('label', [])
+            
+            if len(label_sequence) >= 2:
+                # Use the top-level category as the broad field
+                broad_field = label_sequence[0].lower().replace(' ', '_').replace('-', '_')
+                
+                # Extract all specific fields from the hierarchy
+                for label in label_sequence[1:]:
+                    specific_field = label.lower().strip()
+                    
+                    if broad_field not in self.field_mappings:
+                        self.field_mappings[broad_field] = []
+                    
+                    if specific_field not in self.field_mappings[broad_field]:
+                        self.field_mappings[broad_field].append(specific_field)
+                        categories_processed.add((broad_field, specific_field))
+        
+        logging.getLogger(__name__).info(f"Processed {len(categories_processed)} field mappings from WikipediaFieldOfScience")
+
+    def _process_generic_academic_dataset(self, dataset):
+        """Process a generic academic dataset format."""
+        logging.getLogger(__name__).info("Processing generic academic dataset format")
+        # This is a placeholder for future dataset formats
+        pass
 
     def compute_score(self) -> float:
         """
@@ -128,12 +477,19 @@ class EducationMatcher(BaseMatcher):
             matches = re.findall(pattern, job_text, re.IGNORECASE)
             required_degrees.extend(matches)
         
-        # Look for field requirements
+        # Look for field requirements using comprehensive mappings
         required_fields = []
         for field_category, keywords in self.field_mappings.items():
             for keyword in keywords:
                 if keyword.lower() in job_text:
                     required_fields.append(field_category)
+                    break
+        
+        # Also check keyword mappings
+        for category, keywords in self.field_keywords.items():
+            for keyword in keywords:
+                if keyword.lower() in job_text:
+                    required_fields.append(category)
                     break
         
         return {
@@ -194,7 +550,7 @@ class EducationMatcher(BaseMatcher):
             return 0.3  # No relevant degree found
 
     def _compute_field_relevance(self, resume_education: List[Dict], job: Dict) -> float:
-        """Compute relevance of education field to job requirements."""
+        """Compute relevance of education field to job requirements using comprehensive mappings."""
         if not resume_education:
             return 0.3
             
@@ -213,7 +569,7 @@ class EducationMatcher(BaseMatcher):
                    job.get('Position', '') + ' ' +
                    job.get('Primary Keyword', '')).lower()
         
-        # Score field relevance
+        # Score field relevance using comprehensive mappings
         max_relevance = 0.0
         
         for resume_field in resume_fields:
@@ -238,6 +594,13 @@ class EducationMatcher(BaseMatcher):
                     for keyword in keywords:
                         if any(word in resume_field for word in keyword.split()):
                             max_relevance = max(max_relevance, 0.6)
+        
+        # Also check against keyword mappings for more specific matches
+        for resume_field in resume_fields:
+            for category, keywords in self.field_keywords.items():
+                for keyword in keywords:
+                    if keyword in resume_field and keyword in job_text:
+                        max_relevance = max(max_relevance, 0.8)
         
         return max_relevance if max_relevance > 0 else 0.4
 
@@ -327,7 +690,9 @@ class EducationMatcher(BaseMatcher):
             'job_requirements': job_requirements,
             'degree_match': self._compute_degree_level_match(resume_education, job_requirements),
             'field_relevance': self._compute_field_relevance(resume_education, job),
-            'experience_alignment': self._compute_experience_education_alignment(resume, job)
+            'experience_alignment': self._compute_experience_education_alignment(resume, job),
+            'field_categories_covered': len(self.field_mappings),
+            'total_field_keywords': sum(len(fields) for fields in self.field_mappings.values())
         }
         
         return explanation 

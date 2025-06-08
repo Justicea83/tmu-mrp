@@ -771,6 +771,158 @@ def main():
                                 for match in job_result['top_matches']) / total_matches if total_matches > 0 else 0
                 logger.info(f"  {model_name}: Avg Score = {avg_score:.2f}, Matches = {total_matches}")
 
+            # Run advanced features for model comparison if requested
+            if args.explainable_ai or args.diversity_analysis or args.learning_to_rank:
+                logger.info("=" * 60)
+                logger.info("RUNNING ADVANCED FEATURES FOR MODEL COMPARISON")
+                logger.info("=" * 60)
+
+                # Use results from the first model for advanced analysis
+                primary_model = list(comparison_results.keys())[0]
+                primary_results = comparison_results[primary_model]
+
+                # Flatten all results for advanced analysis
+                all_results = []
+                for job_result in primary_results:
+                    for rank, match in enumerate(job_result['top_matches'], 1):
+                        result_entry = {
+                            'job_id': job_result['job_id'],
+                            'job_position': job_result['job_position'],
+                            'job_company': job_result['job_company'],
+                            'rank': rank,
+                            'resume_id': match['resume_id'],
+                            'resume_category': match['resume_category'],
+                            'total_score': match['total_score'],
+                            'general_score': match['score_breakdown'].get('general', 0),
+                            'skills_score': match['score_breakdown'].get('skills', 0),
+                            'experience_score': match['score_breakdown'].get('experience', 0),
+                            'location_score': match['score_breakdown'].get('location', 0),
+                            'education_score': match['score_breakdown'].get('education', 0)
+                        }
+                        all_results.append(result_entry)
+
+                # Explainable AI
+                if args.explainable_ai:
+                    logger.info("Generating explainable AI analysis...")
+                    explainer = ExplainableAI()
+                    
+                    # Generate explanations for top matches
+                    explanations = []
+                    for i, result in enumerate(all_results[:10]):  # Top 10 for detailed explanation
+                        # Find corresponding resume and job
+                        resume = next((r for r in resumes if r.ID == result['resume_id']), None)
+                        job = next((j for j in jobs if str(j.id) == str(result['job_id'])), None)
+                        
+                        if resume and job:
+                            scores = {
+                                'general': result['general_score'],
+                                'skills': result['skills_score'],
+                                'experience': result['experience_score'],
+                                'location': result['location_score'],
+                                'education': result['education_score']
+                            }
+                            
+                            explanation = explainer.explain_ranking(
+                                resume.__dict__, job.__dict__, scores, weights, all_results
+                            )
+                            explanations.append({
+                                'rank': result['rank'],
+                                'resume_id': result['resume_id'],
+                                'job_position': result['job_position'],
+                                'explanation': explanation
+                            })
+                    
+                    # Save explanations
+                    explanation_file = ensure_logs_directory(f"explanations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    import json
+                    import numpy as np
+                    
+                    # Custom JSON encoder to handle numpy types
+                    class NumpyEncoder(json.JSONEncoder):
+                        def default(self, obj):
+                            if isinstance(obj, np.integer):
+                                return int(obj)
+                            elif isinstance(obj, np.floating):
+                                return float(obj)
+                            elif isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                            elif isinstance(obj, np.bool_):
+                                return bool(obj)
+                            return super(NumpyEncoder, self).default(obj)
+                    
+                    with open(explanation_file, 'w') as f:
+                        json.dump(explanations, f, indent=2, cls=NumpyEncoder)
+                    logger.info(f"Explanations saved to: {explanation_file}")
+
+                # Diversity Analysis
+                if args.diversity_analysis:
+                    logger.info("Performing diversity and bias analysis...")
+                    diversity_analyzer = DiversityAnalytics()
+                    
+                    # Convert resumes to dict format for analysis
+                    resumes_dict = [resume.__dict__ for resume in resumes]
+                    
+                    diversity_analysis = diversity_analyzer.analyze_diversity_metrics(all_results, resumes_dict)
+                    
+                    # Save diversity analysis
+                    diversity_file = ensure_logs_directory(f"diversity_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                    with open(diversity_file, 'w') as f:
+                        json.dump(diversity_analysis, f, indent=2, cls=NumpyEncoder)
+                    logger.info(f"Diversity analysis saved to: {diversity_file}")
+                    
+                    # Generate and save bias report
+                    bias_report = diversity_analyzer.generate_bias_report(all_results, resumes_dict)
+                    bias_report_file = ensure_logs_directory(f"bias_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                    with open(bias_report_file, 'w') as f:
+                        f.write(bias_report)
+                    logger.info(f"Bias report saved to: {bias_report_file}")
+
+                # Learning to Rank
+                if args.learning_to_rank:
+                    logger.info(f"Training learning-to-rank model ({args.ltr_model_type})...")
+                    ltr_engine = LearningToRankEngine(model_type=args.ltr_model_type)
+                    
+                    try:
+                        # Convert data for LTR
+                        resumes_dict = [resume.__dict__ for resume in resumes]
+                        jobs_dict = [job.__dict__ for job in jobs]
+                        
+                        # Prepare training data
+                        features, labels = ltr_engine.prepare_training_data(all_results, resumes_dict, jobs_dict)
+                        
+                        # Train model
+                        training_results = ltr_engine.train_model(features, labels)
+                        logger.info(f"Model training completed. Validation MSE: {training_results['val_mse']:.4f}")
+                        
+                        # Re-rank using ML model
+                        ml_results = ltr_engine.rank_candidates(all_results, resumes_dict, jobs_dict)
+                        
+                        # Save ML results
+                        ml_results_file = ensure_logs_directory(f"ml_ranking_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+                        ml_df = pd.DataFrame(ml_results)
+                        ml_df.to_csv(ml_results_file, index=False)
+                        logger.info(f"ML ranking results saved to: {ml_results_file}")
+                        
+                        # Save model
+                        model_file = ensure_logs_directory(f"ltr_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl")
+                        ltr_engine.save_model(model_file)
+                        logger.info(f"Trained model saved to: {model_file}")
+                        
+                        # Generate feature importance report
+                        importance_report = ltr_engine.get_feature_importance_report()
+                        importance_file = ensure_logs_directory(f"feature_importance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                        with open(importance_file, 'w') as f:
+                            f.write(importance_report)
+                        logger.info(f"Feature importance report saved to: {importance_file}")
+                        
+                        # Evaluate ranking quality
+                        evaluation = ltr_engine.evaluate_ranking_quality(all_results, ml_results)
+                        logger.info(f"Ranking correlation: {evaluation['ranking_correlation']:.3f}")
+                        logger.info(f"Score improvement: {evaluation['score_improvement']['improvement']:.3f}")
+                        
+                    except Exception as e:
+                        logger.error(f"Learning-to-rank failed: {e}")
+
         else:
             # Run standard ranking with specified models
             results = run_ranking(resumes, jobs, args.top_k, args.verbose, weights,

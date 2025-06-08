@@ -152,7 +152,7 @@
 # =============================================================================
 
 python runners/rank.py \
-  --num-jobs 1 --num-resumes 20 \
+  --num-jobs 1 --num-resumes 3 \
   --general-weight 8.0 \
   --skills-weight 1.0 \
   --experience-weight 1.0 \

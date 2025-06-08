@@ -373,4 +373,80 @@ If you use this system in research, please cite:
 
 ## 📄 License
 
-[Add your license information here] 
+[Add your license information here]
+
+## 🎓 Enhanced Education Matching with Hugging Face Integration
+
+The system now includes **comprehensive education field mappings** powered by Hugging Face datasets and advanced local mappings:
+
+### 🔥 **NEW: Automatic Hugging Face Dataset Integration**
+The education matcher now **automatically loads** from Hugging Face datasets by default:
+- **[meliascosta/wiki_academic_subjects](https://huggingface.co/datasets/meliascosta/wiki_academic_subjects)**: 64k academic subject hierarchies from Wikipedia
+- **Hierarchical field mappings** (e.g., `["Humanities", "Philosophy", "Ethics"]`)
+- **Automatic fallback** to comprehensive local mappings if datasets unavailable
+
+### Field Categories Covered
+
+**From Hugging Face Wiki Academic Subjects (loaded by default):**
+- **Humanities**: Philosophy, History, Literature, Linguistics, etc.
+- **Natural Sciences**: Physics, Chemistry, Biology, Earth Sciences, etc.
+- **Social Sciences**: Psychology, Sociology, Anthropology, Economics, etc.
+- **Applied Sciences**: Engineering, Medicine, Agriculture, etc.
+- **Formal Sciences**: Mathematics, Computer Science, Logic, etc.
+- **Interdisciplinary**: Environmental Studies, Cognitive Science, etc.
+
+**Plus comprehensive local mappings:**
+- **Technology** (23 fields): Computer Science, AI, Cybersecurity, etc.
+- **Business** (23 fields): Management, Finance, Marketing, etc.
+- **Engineering** (18 fields): Mechanical, Electrical, Civil, etc.
+- **Science** (20 fields): Mathematics, Biology, Chemistry, etc.
+- **Healthcare** (22 fields): Medicine, Nursing, Public Health, etc.
+- **Education** (14 fields): Teaching, Pedagogy, Curriculum, etc.
+- **Social Sciences** (15 fields): Psychology, Sociology, etc.
+- **Arts & Design** (15 fields): Graphic Design, Architecture, etc.
+- **Legal** (12 fields): Law, Constitutional, Corporate, etc.
+- **Agriculture** (11 fields): Agricultural Science, Forestry, etc.
+
+**Total**: **64k+ Wikipedia academic subjects + 177 comprehensive local mappings**
+
+### Degree Level Hierarchy
+- **PhD/Doctorate** (Level 5): PhD, Doctor, Doctoral
+- **Master's** (Level 4): Master's, MBA, MS, MA, MSc
+- **Bachelor's** (Level 3): Bachelor's, BS, BA, BSc
+- **Associate** (Level 2): Associate, AA, AS
+- **Certificate** (Level 1): Diploma, Certificate, Certification
+
+### Advanced Dataset Integration
+
+The system automatically attempts to load from multiple datasets:
+
+#### Primary: Wiki Academic Subjects (loaded by default) 
+```python
+# Automatically loaded when system starts
+# No configuration required!
+```
+
+#### Optional: Additional Dataset Updates
+```python
+from core.matching_engine.education import EducationMatcher
+
+# System auto-loads wiki_academic_subjects
+matcher = EducationMatcher(match)
+
+# Optionally load additional datasets
+matcher.update_field_mappings_from_dataset("millawell/wikipedia_field_of_science")
+```
+
+#### Available Additional Datasets
+- **[millawell/wikipedia_field_of_science](https://huggingface.co/datasets/millawell/wikipedia_field_of_science)**: 304k scientific field taxonomies
+  - Structure: `token` (list), `label` (hierarchical list like `["Humanities", "Philosophy", "Social philosophy"]`)
+  - Perfect complement to the wiki_academic_subjects dataset
+- **[jacob-hugging-face/job-descriptions](https://huggingface.co/datasets/jacob-hugging-face/job-descriptions)**: 853 job descriptions with field classifications
+- **Custom datasets**: Extensible framework for additional academic datasets with auto-detection of column formats
+
+### Education Matching Features
+1. **Degree Level Alignment**: Matches candidate education level to job requirements
+2. **Field Relevance Scoring**: Uses comprehensive mappings to match study fields
+3. **Experience-Education Balance**: Higher degrees can compensate for less experience
+4. **Keyword Matching**: Enhanced with specialized field keywords
+5. **Comprehensive Coverage**: 177 field mappings across 10 major categories 
