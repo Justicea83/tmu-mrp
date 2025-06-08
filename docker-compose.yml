@@ -1,0 +1,232 @@
+version: '3.8'
+
+services:
+  # Basic Resume-Job Ranking Service
+  resume-ranking-basic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-basic
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - NUM_JOBS=${NUM_JOBS:-5}
+      - NUM_RESUMES=${NUM_RESUMES:-20}
+      - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs
+      - ./datasets:/app/datasets
+      - resume_models:/app/models
+    command: ["python", "runners/rank.py", "--num-jobs", "${NUM_JOBS:-5}", "--num-resumes", "${NUM_RESUMES:-20}"]
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    restart: unless-stopped
+    profiles: ["basic"]
+
+  # Research Configuration with All Advanced Features
+  resume-ranking-research:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-research
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs
+      - ./datasets:/app/datasets
+      - resume_models:/app/models
+    command: [
+      "python", "runners/rank.py",
+      "--num-jobs", "${NUM_JOBS:-10}",
+      "--num-resumes", "${NUM_RESUMES:-100}",
+      "--model-comparison",
+      "--explainable-ai",
+      "--diversity-analysis",
+      "--learning-to-rank",
+      "--category-analysis",
+      "--verbose"
+    ]
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    restart: unless-stopped
+    profiles: ["research"]
+
+  # Gender Bias Analysis Focus
+  resume-ranking-bias-analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-bias-analysis
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs
+      - ./datasets:/app/datasets
+      - resume_models:/app/models
+    command: [
+      "python", "runners/rank.py",
+      "--num-jobs", "${NUM_JOBS:-20}",
+      "--num-resumes", "${NUM_RESUMES:-50}",
+      "--diversity-analysis",
+      "--explainable-ai",
+      "--verbose"
+    ]
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    restart: unless-stopped
+    profiles: ["bias-analysis"]
+
+  # Model Comparison Service
+  resume-ranking-model-comparison:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-model-comparison
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs
+      - ./datasets:/app/datasets
+      - resume_models:/app/models
+    command: [
+      "python", "runners/rank.py",
+      "--num-jobs", "${NUM_JOBS:-10}",
+      "--num-resumes", "${NUM_RESUMES:-50}",
+      "--model-comparison",
+      "--models-to-compare", "sentence-transformers/careerbert-jg", "sentence-transformers/all-mpnet-base-v2",
+      "--category-analysis",
+      "--verbose"
+    ]
+    deploy:
+      resources:
+        limits:
+          memory: 5G
+          cpus: '3.0'
+        reservations:
+          memory: 3G
+          cpus: '1.5'
+    restart: unless-stopped
+    profiles: ["model-comparison"]
+
+  # Production Service with Optimized Configuration
+  resume-ranking-production:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-production
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs:rw
+      - ./datasets:/app/datasets:ro
+      - resume_models:/app/models:rw
+    command: [
+      "python", "runners/rank.py",
+      "--num-jobs", "${NUM_JOBS:-50}",
+      "--num-resumes", "${NUM_RESUMES:-200}",
+      "--diversity-analysis",
+      "--top-k", "10"
+    ]
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 3G
+          cpus: '1.0'
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles: ["production"]
+
+  # Development Service with Interactive Shell
+  resume-ranking-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VERSION: ${VERSION:-2.0-dev}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: resume-ranking-dev
+    environment:
+      - OPENAI_SECRET=${OPENAI_SECRET}
+      - PYTHONPATH=/app
+    volumes:
+      - .:/app:rw
+      - resume_models:/app/models:rw
+    command: ["tail", "-f", "/dev/null"]  # Keep container running for development
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '4.0'
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    profiles: ["dev"]
+
+volumes:
+  resume_models:
+    name: resume_models
+    driver: local
+
+networks:
+  default:
+    name: resume-ranking-network
+
+# Extension for future services
+x-common-variables: &common-variables
+  OPENAI_SECRET: ${OPENAI_SECRET}
+  PYTHONPATH: /app
+  
+x-common-volumes: &common-volumes
+  - ./logs:/app/logs
+  - ./datasets:/app/datasets
+  - resume_models:/app/models 
