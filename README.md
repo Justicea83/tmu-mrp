@@ -594,7 +594,7 @@ If you use this system in research, please cite:
 
 ## 📄 License
 
-[Add your license information here]
+MIT License
 
 ---
 
